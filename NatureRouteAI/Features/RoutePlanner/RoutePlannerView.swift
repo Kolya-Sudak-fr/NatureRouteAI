@@ -10,49 +10,93 @@ struct RoutePlannerView: View {
         NaturePreference(title: "National Parks", isSelected: false),
     ]
     
+    @State private var city: String = ""
+    @State private var tripDays: Int = 3
+    @State private var placesPerDay: Int = 3
+    
     var selectedPreferences: [NaturePreference] {
         preferences.filter { $0.isSelected }
     }
     
     var body: some View {
         
-        VStack(alignment: .leading, spacing: 20){
+        ScrollView{
             
-            Text("Choose nature preferences")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-            
-            List {
+            VStack(alignment: .leading, spacing: 25){
+                
+                Text("Plan your trip")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                
+                //City
+                VStack(alignment: .leading){
+                    
+                    Text("City")
+                        .font(.headline)
+                    
+                    TextField("Enter city", text: $city)
+                        .textFieldStyle(.roundedBorder)
+                    
+                }
+                
+                //Trip days
+                
+                VStack(alignment: .leading){
+                    
+                    Text("Trip duration")
+                        .font(.headline)
+                    
+                    Stepper("\(tripDays) days", value: $tripDays, in: 1...14)
+                    
+                }
+                
+                //Places per day
+                
+                VStack(alignment: .leading){
+                    Text("Places per day")
+                        .font(.headline)
+                    
+                    Stepper("\(placesPerDay)", value: $placesPerDay, in: 1...10)
+                }
+                
+                //Preferences
+                
+                Text("Nature preferences")
+                    .font(.headline)
+                
                 ForEach($preferences) { $preference in
                     
                     Toggle(preference.title,
                            isOn: $preference.isSelected)
-                    
                 }
-            }
-            
-            Button(action: generateRoute){
                 
-                        Text("Generate Route")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(selectedPreferences.isEmpty ? Color.gray : Color.green)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                    }
-                .disabled(selectedPreferences.isEmpty)
+                //Button
+                
+                Button(action: generateRoute) {
+                    Text("Generate route")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(selectedPreferences.isEmpty ? Color.gray : Color.green)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
                 }
-                .padding()
+                .disabled(selectedPreferences.isEmpty)
+            }
+            .padding()
         }
-        
+    }
+    
         func generateRoute() {
             
             let selected = preferences
                 .filter { $0.isSelected }
                 .map{ $0.title}
             
-            print("selected preferences:", selected)
+            print("City:", city)
+            print("Trip days:", tripDays)
+            print("Places per day:", placesPerDay)
+            print("Selected preferences:", selected)
             
         }
     }
