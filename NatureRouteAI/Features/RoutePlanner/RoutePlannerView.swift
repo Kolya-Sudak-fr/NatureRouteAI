@@ -13,6 +13,7 @@ struct RoutePlannerView: View {
     @State private var city: String = ""
     @State private var tripDays: Int = 3
     @State private var placesPerDay: Int = 3
+    @State private var route: Route?
     
     var selectedPreferences: [NaturePreference] {
         preferences.filter { $0.isSelected }
@@ -82,21 +83,46 @@ struct RoutePlannerView: View {
                         .cornerRadius(12)
                 }
                 .disabled(selectedPreferences.isEmpty)
+                if let route = route {
+                    
+                    VStack(alignment: .leading, spacing: 16) {
+                        
+                        Text("Your Route")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        ForEach(route.days) { day in
+                            
+                            VStack(alignment: .leading) {
+                                
+                                Text("Day \(day.dayNumber)")
+                                    .font(.headline)
+                                
+                                ForEach(day.places, id: \.self) { place in
+                                    Text("• \(place)")
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .padding()
         }
     }
     
-        func generateRoute() {
+        func generateRoute()  {
             
             let selected = preferences
                 .filter { $0.isSelected }
-                .map{ $0.title}
+                .map { $0.title }
             
-            print("City:", city)
-            print("Trip days:", tripDays)
-            print("Places per day:", placesPerDay)
-            print("Selected preferences:", selected)
+            let generator = RouteGenerator()
             
+            route = generator.generateRoute(
+                city: city,
+                days: tripDays,
+                placesPerDay: placesPerDay,
+                preferences: selected
+                )
+            }
         }
-    }

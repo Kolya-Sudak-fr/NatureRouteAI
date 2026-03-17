@@ -1,11 +1,11 @@
 import Foundation
 
-class RouteGeneretator{
+class RouteGenerator{
     
     func generateRoute(
         city: String,
         days: Int,
-        placesperday: Int,
+        placesPerDay: Int,
         preferences: [String]
     ) -> Route{
         
@@ -15,7 +15,7 @@ class RouteGeneretator{
             
             var places: [String] = []
             
-            for index in 1...placesperday{
+            for index in 1...placesPerDay{
                 
                 let randomPreference = preferences.randomElement() ?? "Nature"
                 
