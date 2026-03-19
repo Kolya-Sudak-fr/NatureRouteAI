@@ -98,8 +98,8 @@ struct RoutePlannerView: View {
                                 Text("Day \(day.dayNumber)")
                                     .font(.headline)
                                 
-                                ForEach(day.places, id: \.self) { place in
-                                    Text("• \(place)")
+                                ForEach(day.places) { place in
+                                    Text("• \(place.name)")
                                 }
                             }
                         }
