@@ -20,59 +20,44 @@ struct RoutePlannerView: View {
     }
     
     var body: some View {
-        
-        ScrollView{
-            
-            VStack(alignment: .leading, spacing: 25){
+        ScrollView {
+            VStack(alignment: .leading, spacing: 25) {
                 
                 Text("Plan your trip")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                 
-                //City
-                VStack(alignment: .leading){
-                    
+                // City
+                VStack(alignment: .leading) {
                     Text("City")
                         .font(.headline)
-                    
                     TextField("Enter city", text: $city)
                         .textFieldStyle(.roundedBorder)
-                    
                 }
                 
-                //Trip days
-                
-                VStack(alignment: .leading){
-                    
+                // Trip days
+                VStack(alignment: .leading) {
                     Text("Trip duration")
                         .font(.headline)
-                    
                     Stepper("\(tripDays) days", value: $tripDays, in: 1...14)
-                    
                 }
                 
-                //Places per day
-                
-                VStack(alignment: .leading){
+                // Places per day
+                VStack(alignment: .leading) {
                     Text("Places per day")
                         .font(.headline)
-                    
                     Stepper("\(placesPerDay)", value: $placesPerDay, in: 1...10)
                 }
                 
-                //Preferences
-                
+                // Preferences
                 Text("Nature preferences")
                     .font(.headline)
                 
                 ForEach($preferences) { $preference in
-                    
-                    Toggle(preference.title,
-                           isOn: $preference.isSelected)
+                    Toggle(preference.title, isOn: $preference.isSelected)
                 }
                 
-                //Button
-                
+                // Generate button
                 Button(action: generateRoute) {
                     Text("Generate route")
                         .font(.headline)
@@ -83,8 +68,9 @@ struct RoutePlannerView: View {
                         .cornerRadius(12)
                 }
                 .disabled(selectedPreferences.isEmpty)
+                
+                // Route result — показывается только после генерации
                 if let route = route {
-                    
                     VStack(alignment: .leading, spacing: 16) {
                         
                         Text("Your Route")
@@ -92,9 +78,7 @@ struct RoutePlannerView: View {
                             .fontWeight(.bold)
                         
                         ForEach(route.days) { day in
-                            
                             VStack(alignment: .leading) {
-                                
                                 Text("Day \(day.dayNumber)")
                                     .font(.headline)
                                 
@@ -103,6 +87,19 @@ struct RoutePlannerView: View {
                                 }
                             }
                         }
+                        
+                        // Кнопка открывает MapView с готовым маршрутом
+                        NavigationLink {
+                            MapView(route: route)
+                        } label: {
+                            Text("View on Map")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                        }
                     }
                 }
             }
@@ -110,19 +107,17 @@ struct RoutePlannerView: View {
         }
     }
     
-        func generateRoute()  {
-            
-            let selected = preferences
-                .filter { $0.isSelected }
-                .map { $0.title }
-            
-            let generator = RouteGenerator()
-            
-            route = generator.generateRoute(
-                city: city,
-                days: tripDays,
-                placesPerDay: placesPerDay,
-                preferences: selected
-                )
-            }
-        }
+    func generateRoute() {
+        let selected = preferences
+            .filter { $0.isSelected }
+            .map { $0.title }
+        
+        let generator = RouteGenerator()
+        route = generator.generateRoute(
+            city: city,
+            days: tripDays,
+            placesPerDay: placesPerDay,
+            preferences: selected
+        )
+    }
+}
