@@ -7,5 +7,5 @@ struct Route {
 struct RouteDay: Identifiable {
     let id = UUID()
     let dayNumber: Int
-    let places: [String]
+    let places: [Place]
 }
