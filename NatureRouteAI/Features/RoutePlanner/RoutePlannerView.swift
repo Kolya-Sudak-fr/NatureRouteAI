@@ -113,11 +113,20 @@ struct RoutePlannerView: View {
             .map { $0.title }
         
         let generator = RouteGenerator()
-        route = generator.generateRoute(
-            city: city,
-            days: tripDays,
-            placesPerDay: placesPerDay,
-            preferences: selected
-        )
+        
+        // Task позволяет вызвать async функцию из обычного контекста
+        Task {
+            do {
+                route = try await generator.generateRoute(
+                    city: city,
+                    days: tripDays,
+                    placesPerDay: placesPerDay,
+                    preferences: selected
+                )
+            } catch {
+                // Пока просто печатаем ошибку в консоль
+                print("Error generating route: \(error)")
+            }
+        }
     }
 }
