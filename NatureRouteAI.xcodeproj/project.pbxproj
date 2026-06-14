@@ -6,8 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		93C469402FDF3F7C000D004F /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C4693F2FDF3F78000D004F /* Secrets.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		936290472F62D95A00E33040 /* NatureRouteAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NatureRouteAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		93C4693F2FDF3F78000D004F /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -34,6 +39,7 @@
 			children = (
 				936290492F62D95A00E33040 /* NatureRouteAI */,
 				936290482F62D95A00E33040 /* Products */,
+				93C4693F2FDF3F78000D004F /* Secrets.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -119,6 +125,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				93C469402FDF3F7C000D004F /* Secrets.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

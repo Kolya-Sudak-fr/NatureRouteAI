@@ -31,14 +31,12 @@ struct RoutePlannerView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     
-                    // Header
                     Text("Plan your trip")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                         .padding(.top, 8)
                     
-                    // City input
                     VStack(alignment: .leading, spacing: 8) {
                         Label("City", systemImage: "mappin.circle.fill")
                             .font(.headline)

@@ -8,12 +8,12 @@ class RouteGenerator {
     // Маппинг предпочтений пользователя в категории OpenTripMap
     private func kindsFor(preference: String) -> String {
         switch preference {
-        case "Mountains":   return "mountain_peaks"
-        case "Forest":      return "nature_reserves"
-        case "Lakes":       return "lakes"
-        case "Waterfalls":  return "waterfalls"
+        case "Mountains":      return "mountain_peaks"
+        case "Forest":         return "nature_reserves"
+        case "Lakes":          return "water"
+        case "Waterfalls":     return "waterfalls"
         case "National Parks": return "national_parks"
-        default:            return "natural"
+        default:               return "natural"
         }
     }
     

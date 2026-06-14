@@ -68,7 +68,12 @@ struct MapView: View {
             }
         }
         .ignoresSafeArea()
-        // Когда маршрут появляется или меняется — центрируем камеру
+        .onAppear {
+            // Центрируем сразу при открытии
+            if !allPlaces.isEmpty {
+                cameraPosition = .region(fitRegion)
+            }
+        }
         .onChange(of: allPlaces.count) {
             withAnimation {
                 cameraPosition = .region(fitRegion)

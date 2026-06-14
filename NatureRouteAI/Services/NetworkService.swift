@@ -3,10 +3,10 @@
 //  NatureRouteAI
 //
 //  Created by Kolya Sudak on 03/06/2026.
-//5ae2e3f221c38a28845f05b6395bc7aecc6edb35ed8696bd0ee69463
+//
 
 import Foundation
-internal import _LocationEssentials
+import CoreLocation
 
 class NetworkService {
     
@@ -35,13 +35,13 @@ class NetworkService {
     // Шаг 2 — получаем места рядом с координатами по категории
     func fetchPlaces(lat: Double, lon: Double, kinds: String, count: Int) async throws -> [Place] {
         
-        let urlString = "\(baseURL)/radius?radius=10000&lon=\(lon)&lat=\(lat)&kinds=\(kinds)&limit=\(count)&apikey=\(apiKey)"
-        
+        let urlString = "\(baseURL)/radius?radius=50000&lon=\(lon)&lat=\(lat)&kinds=\(kinds)&limit=\(count)&apikey=\(apiKey)"
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }
         
         let (data, _) = try await URLSession.shared.data(from: url)
+        print("Places API response: \(String(data: data, encoding: .utf8) ?? "nil")")
         let json = try JSONDecoder().decode(PlacesResponse.self, from: data)
         
         return json.features.map { feature in
