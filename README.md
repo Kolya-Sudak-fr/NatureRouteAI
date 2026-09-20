@@ -25,9 +25,6 @@ This project is part of my journey from factory worker to iOS developer.
 
 I’m building this app in public and sharing progress every day.
 
-## Development Progress
+## Development in Progress
 
-Day 1
-• Project created
-• GitHub connected
-• Home screen started
+
