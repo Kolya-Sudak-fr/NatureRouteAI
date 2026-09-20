@@ -1,84 +1,72 @@
 import SwiftUI
 
 struct RoutePlannerView: View {
-    
-    @State private var preferences: [NaturePreference] = [
-        NaturePreference(title: "Mountains", isSelected: false),
-        NaturePreference(title: "Forest", isSelected: false),
-        NaturePreference(title: "Lakes", isSelected: false),
-        NaturePreference(title: "Waterfalls", isSelected: false),
-        NaturePreference(title: "National Parks", isSelected: false),
-    ]
-    
-    @State private var city: String = ""
-    @State private var tripDays: Int = 3
-    @State private var placesPerDay: Int = 3
-    @State private var route: Route?
-    @State private var isLoading: Bool = false
-    
+
+    @StateObject private var viewModel = RoutePlannerViewModel()
+
     private let green = Color(red: 0.2, green: 0.85, blue: 0.4)
     private let darkBg = Color(red: 0.08, green: 0.10, blue: 0.08)
     private let cardBg = Color(red: 0.15, green: 0.18, blue: 0.15)
-    
-    var selectedPreferences: [NaturePreference] {
-        preferences.filter { $0.isSelected }
-    }
-    
+
     var body: some View {
         ZStack {
             darkBg.ignoresSafeArea()
-            
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    
+
                     Text("Plan your trip")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                         .padding(.top, 8)
-                    
+
+                    // MARK: - City input
                     VStack(alignment: .leading, spacing: 8) {
                         Label("City", systemImage: "mappin.circle.fill")
                             .font(.headline)
                             .foregroundColor(green)
-                        
-                        TextField("", text: $city, prompt: Text("Enter city").foregroundColor(.gray))
+
+                        // $viewModel.city — Binding к ViewModel.
+                        // Когда пользователь печатает — viewModel.city обновляется автоматически.
+                        TextField("", text: $viewModel.city,
+                                  prompt: Text("Enter city").foregroundColor(.gray))
                             .foregroundColor(.white)
                             .padding()
                             .background(cardBg)
                             .cornerRadius(12)
                     }
-                    
-                    // Trip duration
+
+                    // MARK: - Trip duration
                     VStack(alignment: .leading, spacing: 8) {
                         Label("Trip duration", systemImage: "calendar")
                             .font(.headline)
                             .foregroundColor(green)
-                        
+
                         HStack {
-                            Text("\(tripDays) days")
+                            Text("\(viewModel.tripDays) days")
                                 .foregroundColor(.white)
                                 .font(.title3)
                                 .fontWeight(.semibold)
-                            
+
                             Spacer()
-                            
+
                             HStack(spacing: 0) {
                                 Button {
-                                    if tripDays > 1 { tripDays -= 1 }
+                                    if viewModel.tripDays > 1 { viewModel.tripDays -= 1 }
                                 } label: {
                                     Image(systemName: "minus")
                                         .foregroundColor(.white)
                                         .frame(width: 44, height: 44)
                                         .background(cardBg)
                                 }
-                                
+
                                 Divider()
                                     .frame(height: 44)
                                     .background(.gray)
-                                
+
                                 Button {
-                                    if tripDays < 14 { tripDays += 1 }
+                                    if viewModel.tripDays < 14 { viewModel.tripDays += 1 }
                                 } label: {
                                     Image(systemName: "plus")
                                         .foregroundColor(.white)
@@ -92,37 +80,37 @@ struct RoutePlannerView: View {
                         .background(cardBg)
                         .cornerRadius(12)
                     }
-                    
-                    // Places per day
+
+                    // MARK: - Places per day
                     VStack(alignment: .leading, spacing: 8) {
                         Label("Places per day", systemImage: "location.fill")
                             .font(.headline)
                             .foregroundColor(green)
-                        
+
                         HStack {
-                            Text("\(placesPerDay) places")
+                            Text("\(viewModel.placesPerDay) places")
                                 .foregroundColor(.white)
                                 .font(.title3)
                                 .fontWeight(.semibold)
-                            
+
                             Spacer()
-                            
+
                             HStack(spacing: 0) {
                                 Button {
-                                    if placesPerDay > 1 { placesPerDay -= 1 }
+                                    if viewModel.placesPerDay > 1 { viewModel.placesPerDay -= 1 }
                                 } label: {
                                     Image(systemName: "minus")
                                         .foregroundColor(.white)
                                         .frame(width: 44, height: 44)
                                         .background(cardBg)
                                 }
-                                
+
                                 Divider()
                                     .frame(height: 44)
                                     .background(.gray)
-                                
+
                                 Button {
-                                    if placesPerDay < 10 { placesPerDay += 1 }
+                                    if viewModel.placesPerDay < 10 { viewModel.placesPerDay += 1 }
                                 } label: {
                                     Image(systemName: "plus")
                                         .foregroundColor(.white)
@@ -136,19 +124,20 @@ struct RoutePlannerView: View {
                         .background(cardBg)
                         .cornerRadius(12)
                     }
-                    
-                    // Nature preferences
+
+                    // MARK: - Nature preferences
                     VStack(alignment: .leading, spacing: 12) {
                         Label("Nature preferences", systemImage: "leaf.fill")
                             .font(.headline)
                             .foregroundColor(green)
-                        
-                        // Chip-стиль вместо Toggle
+
                         LazyVGrid(columns: [
                             GridItem(.flexible()),
                             GridItem(.flexible())
                         ], spacing: 10) {
-                            ForEach($preferences) { $pref in
+                            // $viewModel.preferences — Binding к массиву в ViewModel.
+                            // Изменение pref.isSelected автоматически обновляет ViewModel.
+                            ForEach($viewModel.preferences) { $pref in
                                 Button {
                                     pref.isSelected.toggle()
                                 } label: {
@@ -169,11 +158,13 @@ struct RoutePlannerView: View {
                             }
                         }
                     }
-                    
-                    // Generate button
-                    Button(action: generateRoute) {
+
+                    // MARK: - Generate button
+                    // viewModel.canGenerate — ViewModel решает активна ли кнопка.
+                    // View просто спрашивает и отображает результат.
+                    Button(action: viewModel.generateRoute) {
                         HStack {
-                            if isLoading {
+                            if viewModel.isLoading {
                                 ProgressView()
                                     .tint(.black)
                                 Text("Building your route...")
@@ -188,26 +179,27 @@ struct RoutePlannerView: View {
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(selectedPreferences.isEmpty || city.isEmpty ? Color.gray : green)
+                        .background(viewModel.canGenerate ? green : Color.gray)
                         .cornerRadius(14)
                     }
-                    .disabled(selectedPreferences.isEmpty || city.isEmpty || isLoading)
-                    
-                    // Route result
-                    if let route = route {
+                    .disabled(!viewModel.canGenerate)
+
+                    // MARK: - Route result
+                    // View просто проверяет viewModel.route и отображает если есть.
+                    if let route = viewModel.route {
                         VStack(alignment: .leading, spacing: 16) {
-                            
+
                             Text("Your Route")
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
-                            
+
                             ForEach(route.days) { day in
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("Day \(day.dayNumber)")
                                         .font(.headline)
                                         .foregroundColor(green)
-                                    
+
                                     ForEach(day.places) { place in
                                         HStack {
                                             Circle()
@@ -223,7 +215,7 @@ struct RoutePlannerView: View {
                                 .background(cardBg)
                                 .cornerRadius(12)
                             }
-                            
+
                             NavigationLink {
                                 MapView(route: route)
                             } label: {
@@ -248,28 +240,14 @@ struct RoutePlannerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(darkBg, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
-    }
-    
-    func generateRoute() {
-        let selected = preferences
-            .filter { $0.isSelected }
-            .map { $0.title }
-        
-        let generator = RouteGenerator()
-        isLoading = true
-        
-        Task {
-            do {
-                route = try await generator.generateRoute(
-                    city: city,
-                    days: tripDays,
-                    placesPerDay: placesPerDay,
-                    preferences: selected
-                )
-            } catch {
-                print("Error generating route: \(error)")
+        // Алерт — показывается когда viewModel.errorMessage не nil.
+        // View не знает откуда ошибка — просто показывает что ViewModel скажет.
+        .alert("Something went wrong", isPresented: .constant(viewModel.errorMessage != nil)) {
+            Button("Try again") {
+                viewModel.errorMessage = nil
             }
-            isLoading = false
+        } message: {
+            Text(viewModel.errorMessage ?? "")
         }
     }
 }
