@@ -53,8 +53,13 @@ class RoutePlannerViewModel: ObservableObject {
                     placesPerDay: placesPerDay,
                     preferences: selected
                 )
+            }  catch let appError as AppError {
+                // AppError — наш тип ошибки. Берём конкретный текст для пользователя.
+                // Например cityNotFound → "City not found. Check the spelling and try again."
+                errorMessage = appError.userMessage
             } catch {
-                errorMessage = "Could not generate route. Check the city name and try again."
+                // Любая другая ошибка которую мы не предусмотрели
+                errorMessage = AppError.unknown.userMessage
             }
             isLoading = false
         }
