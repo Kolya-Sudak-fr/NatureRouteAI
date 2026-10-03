@@ -25,8 +25,9 @@ class NetworkService {
             }
         }
         
+        #if DEBUG
         print("City API response: \(String(data: data, encoding: .utf8) ?? "nil")")
-        
+        #endif
         let json = try JSONDecoder().decode(CityResponse.self, from: data)
         
         guard json.status == "OK" else {
@@ -63,9 +64,9 @@ class NetworkService {
                 throw AppError.serverError(httpResponse.statusCode)
             }
         }
-        
+        #if DEBUG
         print("Places API response: \(String(data: data, encoding: .utf8) ?? "nil")")
-        
+        #endif
         let json = try JSONDecoder().decode(PlacesResponse.self, from: data)
         
         let validPlaces = json.features.filter { !$0.properties.name.isEmpty }
