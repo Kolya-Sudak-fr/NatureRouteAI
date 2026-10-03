@@ -80,10 +80,8 @@ class NetworkService {
                 name: feature.properties.name,
                 type: kinds,
                 city: "",
-                coordinate: .init(
-                    latitude: feature.geometry.coordinates[1],
-                    longitude: feature.geometry.coordinates[0]
-                )
+                latitude: feature.geometry.coordinates[1],
+                longitude: feature.geometry.coordinates[0]
             )
         }
     }

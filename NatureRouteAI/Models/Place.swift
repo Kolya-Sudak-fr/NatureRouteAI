@@ -6,5 +6,9 @@ struct Place: Identifiable {
     let name: String
     let type: String
     let city: String
-    let coordinate: CLLocationCoordinate2D
+    let latitude: Double
+    let longitude: Double
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
 }
