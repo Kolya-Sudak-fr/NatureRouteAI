@@ -64,7 +64,7 @@ struct HomeView: View {
                         // Secondary buttons
                         HStack(spacing: 12) {
                             NavigationLink {
-                                MapView()
+                                MapView(route: nil)
                             } label: {
                                 SecondaryCard(
                                     icon: "globe.europe.africa.fill",
@@ -74,7 +74,7 @@ struct HomeView: View {
                             }
                             
                             NavigationLink {
-                                Text("Saved Routes")
+                                SavedRoutesView()
                                     .foregroundColor(.white)
                             } label: {
                                 SecondaryCard(
@@ -120,3 +120,4 @@ struct SecondaryCard: View {
         .frame(maxWidth: .infinity)
     }
 }
+
