@@ -25,9 +25,6 @@ class NetworkService {
             }
         }
         
-        #if DEBUG
-        print("City API response: \(String(data: data, encoding: .utf8) ?? "nil")")
-        #endif
         let json = try JSONDecoder().decode(CityResponse.self, from: data)
         
         guard json.status == "OK" else {
@@ -41,11 +38,11 @@ class NetworkService {
         return (lat: lat, lon: lon)
     }
     
-    func fetchPlaces(lat: Double, lon: Double, kinds: String, count: Int) async throws -> [Place] {
+    func fetchPlaces(lat: Double, lon: Double, kinds: String, count: Int, radiusMeters: Int = 50_000) async throws -> [Place] {
         
         var components = URLComponents(string: "https://api.opentripmap.com/0.1/en/places/radius")!
         components.queryItems = [
-            URLQueryItem(name: "radius", value: "50000"),
+            URLQueryItem(name: "radius", value: "\(radiusMeters)"),
             URLQueryItem(name: "lon", value: "\(lon)"),
             URLQueryItem(name: "lat", value: "\(lat)"),
             URLQueryItem(name: "kinds", value: kinds),
@@ -64,9 +61,7 @@ class NetworkService {
                 throw AppError.serverError(httpResponse.statusCode)
             }
         }
-        #if DEBUG
-        print("Places API response: \(String(data: data, encoding: .utf8) ?? "nil")")
-        #endif
+        
         let json = try JSONDecoder().decode(PlacesResponse.self, from: data)
         
         let validPlaces = json.features.filter { !$0.properties.name.isEmpty }
@@ -87,8 +82,6 @@ class NetworkService {
     }
     
     // MARK: - Response Models
-    // Эти структуры private — используются только внутри NetworkService
-    
     private struct CityResponse: Decodable {
         let lat: Double?
         let lon: Double?

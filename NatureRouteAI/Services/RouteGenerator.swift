@@ -4,6 +4,7 @@ import CoreLocation
 class RouteGenerator {
     
     private let networkService = NetworkService()
+    private let placeSearchRadiusMeters = 50_000
     
     // Маппинг предпочтений пользователя в категории OpenTripMap
     private func kindsFor(preference: String) -> String {
@@ -21,7 +22,8 @@ class RouteGenerator {
         city: String,
         days: Int,
         placesPerDay: Int,
-        preferences: [String]
+        preferences: [String],
+        transport: TransportMode = .walking
     ) async throws -> Route {
         
         // Шаг 1 — получаем реальные координаты города
@@ -36,16 +38,19 @@ class RouteGenerator {
             let kinds = kindsFor(preference: preference)
             
             // Шаг 2 — получаем реальные места
+            // Ищем природные места независимо от выбранного транспорта.
+            // Режим влияет на построение/открытие маршрута, но не на наличие POI.
             let places = try await networkService.fetchPlaces(
                 lat: cityCoord.lat,
                 lon: cityCoord.lon,
                 kinds: kinds,
-                count: placesPerDay
+                count: placesPerDay,
+                radiusMeters: placeSearchRadiusMeters
             )
             
             routeDays.append(RouteDay(dayNumber: day, places: places))
         }
         
-        return Route(days: routeDays)
+        return Route(city: city, days: routeDays, transport: transport)
     }
 }
