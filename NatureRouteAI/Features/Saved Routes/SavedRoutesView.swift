@@ -2,141 +2,205 @@ import SwiftUI
 import SwiftData
 
 struct SavedRoutesView: View {
-    
-    // @Query — SwiftData автоматически загружает все сохранённые маршруты из базы.
-    // Сортируем по дате создания — новые сверху.
-    // Когда база меняется — View обновляется автоматически.
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @Query(sort: \Route.createdAt, order: .reverse) private var routes: [Route]
-    
+    @State private var routeToDelete: Route?
+    @State private var isShowingDeleteConfirmation = false
+    @State private var deletionError: String?
+
     private let darkBg = Color(red: 0.08, green: 0.10, blue: 0.08)
     private let cardBg = Color(red: 0.15, green: 0.18, blue: 0.15)
     private let green = Color(red: 0.2, green: 0.85, blue: 0.4)
-    
+
     var body: some View {
         ZStack {
             darkBg.ignoresSafeArea()
-            
             if routes.isEmpty {
-                // Пустое состояние — когда маршрутов ещё нет
-                VStack(spacing: 16) {
-                    Image(systemName: "bookmark.slash")
-                        .font(.system(size: 48))
-                        .foregroundColor(.gray)
-                    Text("No saved routes yet")
-                        .font(.title3)
-                        .foregroundColor(.gray)
-                    Text("Generate a route and tap Save")
-                        .font(.subheadline)
-                        .foregroundColor(.gray.opacity(0.7))
+                ContentUnavailableView {
+                    Label("No saved routes", systemImage: "map")
+                } description: {
+                    Text("Create a nature trip and save it to see it here.")
+                } actions: {
+                    Button("Back to route planning") { dismiss() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(green)
                 }
+                .foregroundStyle(.white)
             } else {
                 ScrollView {
-                    VStack(spacing: 12) {
+                    LazyVStack(spacing: 14) {
                         ForEach(routes) { route in
-                            // Карточка одного маршрута
-                            NavigationLink {
-                                RouteDetailView(route: route)
-                            } label: {
-                                RouteCard(route: route, green: green, cardBg: cardBg)
+                            HStack(spacing: 10) {
+                                NavigationLink {
+                                    RouteDetailView(route: route)
+                                } label: {
+                                    RouteCard(route: route)
+                                }
+                                .buttonStyle(.plain)
+
+                                Menu {
+                                    Button(role: .destructive) {
+                                        routeToDelete = route
+                                        isShowingDeleteConfirmation = true
+                                    } label: {
+                                        Label("Delete Route", systemImage: "trash")
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .font(.headline)
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 36, height: 44)
+                                        .contentShape(Rectangle())
+                                }
+                                .accessibilityLabel("Actions for \(route.city ?? "route")")
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
                 }
             }
         }
-        .navigationTitle("Saved Routes")
-        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Saved Routes")
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(darkBg, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .confirmationDialog(
+            "Delete this route?",
+            isPresented: $isShowingDeleteConfirmation,
+            titleVisibility: .visible,
+            presenting: routeToDelete
+        ) { route in
+            Button("Delete \(route.city ?? "Route")", role: .destructive) {
+                delete(route)
+            }
+            Button("Cancel", role: .cancel) { routeToDelete = nil }
+        } message: { route in
+            Text("\(route.city ?? "This route") and its days and stops will be removed from Saved Routes.")
+        }
+        .alert("Couldn't Delete Route", isPresented: Binding(
+            get: { deletionError != nil },
+            set: { if !$0 { deletionError = nil } }
+        )) {
+            Button("OK", role: .cancel) { deletionError = nil }
+        } message: {
+            Text(deletionError ?? "Please try again.")
+        }
+    }
+
+    private func delete(_ route: Route) {
+        do {
+            try modelContext.transaction {
+                modelContext.delete(route)
+            }
+            routeToDelete = nil
+        } catch {
+            deletionError = error.localizedDescription
+        }
     }
 }
 
-// Отдельный компонент карточки маршрута —
-// чтобы не перегружать основной View
 struct RouteCard: View {
     let route: Route
-    let green: Color
-    let cardBg: Color
-    
-    // Общее количество мест во всех днях
-    var totalPlaces: Int {
+
+    private var totalPlaces: Int {
         route.days.reduce(0) { $0 + $1.places.count }
     }
-    
+
+    private var categories: [String] {
+        Array(Set(route.days.flatMap(\.places).map(\.type))).sorted().prefix(2).map(Self.readableCategory)
+    }
+
     var body: some View {
-        HStack(spacing: 16) {
-            // Миниатюра города (детерминированное фото по названию города)
-            CityThumb(city: route.city ?? "Unknown City")
-                .frame(width: 56, height: 56)
-                .cornerRadius(12)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(green.opacity(0.4), lineWidth: 1)
-                )
-            
-            // Информация о маршруте
-            VStack(alignment: .leading, spacing: 4) {
-                // Здесь мы используем опциональную развертку (??)
-                // Это гарантирует, что ошибка 'Optional type' исчезнет
-                Text(route.city ?? "Unknown City")
+        HStack(spacing: 12) {
+            RouteThumbnail(route: route)
+                .frame(width: 88, height: 96)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(route.city ?? "Nature Route")
                     .font(.headline)
-                    .foregroundColor(.white)
-                
-                HStack(spacing: 12) {
-                    // Количество дней
-                    Label("\(route.days.count) days", systemImage: "calendar")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                    
-                    // Количество мест
-                    Label("\(totalPlaces) places", systemImage: "mappin")
-                        .font(.caption)
-                        .foregroundColor(.gray)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(categories.isEmpty ? "Nature getaway" : categories.joined(separator: " · "))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ViewThatFits(in: .horizontal) {
+                    metadata(compact: false)
+                    metadata(compact: true)
                 }
-                
-                // Дата сохранения
-                Text(route.createdAt.formatted(date: .abbreviated, time: .omitted))
-                    .font(.caption2)
-                    .foregroundColor(.gray)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding()
-        .background(cardBg)
-        .cornerRadius(15)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(.white.opacity(0.07), lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func metadata(compact: Bool) -> some View {
+        HStack(spacing: compact ? 7 : 11) {
+            Label("\(route.days.count)d", systemImage: "calendar")
+            Label("\(totalPlaces)", systemImage: "mappin.and.ellipse")
+            Label(route.transportMode.displayName, systemImage: route.transportMode.systemIcon)
+                .lineLimit(1)
+        }
+        .font(.caption2.weight(.medium))
+        .foregroundStyle(.secondary)
+    }
+
+    private static func readableCategory(_ type: String) -> String {
+        switch type {
+        case "mountain_peaks": "Mountains"
+        case "nature_reserves", "natural": "Nature"
+        case "water": "Lakes & water"
+        case "waterfalls": "Waterfalls"
+        case "national_parks": "National parks"
+        default: type.replacingOccurrences(of: "_", with: " ").capitalized
+        }
     }
 }
 
-// Миниатюра города: детерминированное фото (seed = название города),
-// если нет сети — зелёный плейсхолдер с листом
-struct CityThumb: View {
-    let city: String
+private struct RouteThumbnail: View {
+    let route: Route
 
-    private let green = Color(red: 0.2, green: 0.85, blue: 0.4)
-
-    var url: URL? {
-        var components = URLComponents(string: "https://picsum.photos/seed/")
-        components?.path = "/seed/\(city.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? city)/120/120"
-        return components?.url
+    private var symbol: String {
+        let types = Set(route.days.flatMap(\.places).map(\.type))
+        if types.contains("waterfalls") || types.contains("water") { return "water.waves" }
+        if types.contains("mountain_peaks") { return "mountain.2.fill" }
+        if types.contains("nature_reserves") || types.contains("national_parks") { return "tree.fill" }
+        return "leaf.fill"
     }
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .success(let image):
-                image
-                    .resizable()
-                    .scaledToFill()
-            default:
-                ZStack {
-                    Color(red: 0.15, green: 0.18, blue: 0.15)
-                    Image(systemName: "leaf.fill")
-                        .font(.title3)
-                        .foregroundColor(green)
-                }
-            }
+        ZStack {
+            LinearGradient(
+                colors: [Color.green.opacity(0.28), Color.teal.opacity(0.12), Color.primary.opacity(0.05)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Image(systemName: symbol)
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(.green)
+                .accessibilityHidden(true)
         }
+        .accessibilityLabel("Nature route thumbnail")
     }
 }
