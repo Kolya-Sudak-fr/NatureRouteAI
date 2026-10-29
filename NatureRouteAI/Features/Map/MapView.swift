@@ -23,6 +23,7 @@ struct MapView: View {
     @State private var isCalculating = false
     @State private var attemptedLegCount = 0
     @State private var failedLegCount = 0
+    @State private var firstRoutingError: String?
 
     struct DayRoadLines: Identifiable {
         let id = UUID()
@@ -118,6 +119,13 @@ struct MapView: View {
     /// Запрашивает у MapKit дорогу между каждой парой соседних мест дня.
     /// MKDirections (.automobile) — путь строится по реальной дорожной сети Apple Maps.
     private func calculateRoadRoutes() {
+        if route?.transportMode == .publicTransport {
+            dayRoads = sortedDays.enumerated().map { DayRoadLines(dayIndex: $0.offset, lines: []) }
+            attemptedLegCount = 0
+            failedLegCount = 0
+            isCalculating = false
+            return
+        }
         guard !sortedDays.isEmpty else {
             attemptedLegCount = 0
             failedLegCount = 0
@@ -128,6 +136,7 @@ struct MapView: View {
         dayRoads = []
         attemptedLegCount = 0
         failedLegCount = 0
+        firstRoutingError = nil
 
         Task { @MainActor in
             var result: [DayRoadLines] = []
@@ -176,6 +185,9 @@ struct MapView: View {
                         }
                     } catch {
                         failed += 1
+                        if firstRoutingError == nil {
+                            firstRoutingError = error.localizedDescription
+                        }
                     }
                 }
                 result.append(DayRoadLines(dayIndex: dayIndex, lines: lines))
@@ -194,18 +206,28 @@ struct MapView: View {
     }
 
     private var routingMessage: String? {
+        if route?.transportMode == .publicTransport, !allPlaces.isEmpty {
+            return "NatureRouteAI doesn't calculate public transport routes. The stops remain on the map; open a stop in Apple Maps or Google Maps to check transit directions."
+        }
         guard attemptedLegCount > 0, failedLegCount > 0 else { return nil }
         let modeName: String
         switch route?.transportMode {
         case .walking: modeName = "walking"
         case .cycling: modeName = "cycling"
-        case .car, .none: modeName = "driving"
+        case .car: modeName = "driving"
+        case .publicTransport: modeName = "public transport"
+        case .none: modeName = "driving"
         }
 
         if failedLegCount == attemptedLegCount {
-            return "Places were found, but MapKit couldn't build any \(modeName) route segments (\(failedLegCount)/\(attemptedLegCount)). The points remain on the map; open a stop individually from the route details."
+            return "Places were found, but MapKit couldn't build any \(modeName) route segments (\(failedLegCount)/\(attemptedLegCount)). The points remain on the map; open a stop individually from the route details.\(routingErrorDetail)"
         }
-        return "MapKit couldn't build \(failedLegCount) of \(attemptedLegCount) \(modeName) route segments. All found places remain on the map; you can navigate to each stop individually."
+        return "MapKit couldn't build \(failedLegCount) of \(attemptedLegCount) \(modeName) route segments. All found places remain on the map; you can navigate to each stop individually.\(routingErrorDetail)"
+    }
+
+    private var routingErrorDetail: String {
+        guard let firstRoutingError else { return "" }
+        return " Details: \(firstRoutingError)"
     }
 
     // MARK: - Область видимости (точки + построенные дороги)

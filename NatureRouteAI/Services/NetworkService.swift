@@ -34,11 +34,22 @@ class NetworkService {
         guard let lat = json.lat, let lon = json.lon else {
             throw AppError.unknown
         }
+
+        guard CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: lat, longitude: lon)) else {
+            throw AppError.unknown
+        }
         
         return (lat: lat, lon: lon)
     }
     
-    func fetchPlaces(lat: Double, lon: Double, kinds: String, count: Int, radiusMeters: Int = 50_000) async throws -> [Place] {
+    func fetchPlaces(
+        lat: Double,
+        lon: Double,
+        kinds: String,
+        preference: String,
+        count: Int,
+        radiusMeters: Int = 50_000
+    ) async throws -> [RoutePlaceCandidate] {
         
         var components = URLComponents(string: "https://api.opentripmap.com/0.1/en/places/radius")!
         components.queryItems = [
@@ -64,21 +75,34 @@ class NetworkService {
         
         let json = try JSONDecoder().decode(PlacesResponse.self, from: data)
         
-        let validPlaces = json.features.filter { !$0.properties.name.isEmpty }
+        let validPlaces = json.features.enumerated().compactMap { index, feature -> RoutePlaceCandidate? in
+            let name = feature.properties.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let coordinates = feature.geometry.coordinates
+            guard !name.isEmpty, coordinates.count >= 2 else { return nil }
+
+            let longitude = coordinates[0]
+            let latitude = coordinates[1]
+            guard CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) else {
+                return nil
+            }
+
+            return RoutePlaceCandidate(
+                externalID: feature.properties.xid,
+                name: name,
+                type: kinds,
+                latitude: latitude,
+                longitude: longitude,
+                preferences: [preference],
+                quality: feature.properties.rate,
+                sourceOrder: index
+            )
+        }
         
         guard !validPlaces.isEmpty else {
             throw AppError.noPlacesFound
         }
         
-        return validPlaces.map { feature in
-            Place(
-                name: feature.properties.name,
-                type: kinds,
-                city: "",
-                latitude: feature.geometry.coordinates[1],
-                longitude: feature.geometry.coordinates[0]
-            )
-        }
+        return validPlaces
     }
     
     // MARK: - Response Models
@@ -104,5 +128,7 @@ class NetworkService {
     
     private struct Properties: Decodable {
         let name: String
+        let xid: String?
+        let rate: Int?
     }
 }

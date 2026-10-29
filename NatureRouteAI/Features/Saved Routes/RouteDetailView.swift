@@ -12,7 +12,7 @@ struct RouteDetailView: View {
     @State private var navigationError: String?
     @AppStorage private var nextStopIndex: Int
 
-    // Единая палитра приложения
+    // Shared app color palette
     private let darkBg = Color(red: 0.08, green: 0.10, blue: 0.08)
     private let cardBg = Color(red: 0.15, green: 0.18, blue: 0.15)
     private let green = Color(red: 0.2, green: 0.85, blue: 0.4)
@@ -65,7 +65,7 @@ struct RouteDetailView: View {
                             Button {
                                 prepareNavigation(to: nextStop, progressIndex: nextStopIndex)
                             } label: {
-                                Label("Следующая остановка", systemImage: "arrow.turn.up.right")
+                                Label("Next Stop", systemImage: "arrow.turn.up.right")
                                     .font(.headline)
                                     .fontWeight(.bold)
                                     .foregroundColor(.black)
@@ -74,13 +74,13 @@ struct RouteDetailView: View {
                                     .background(green, in: RoundedRectangle(cornerRadius: 14))
                             }
 
-                            Text("Далее: \(nextStop.name)")
+                            Text("Up next: \(nextStop.name)")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } else {
-                        Label("Все остановки пройдены", systemImage: "checkmark.circle.fill")
+                        Label("All stops visited", systemImage: "checkmark.circle.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(green)
                     }
@@ -89,7 +89,7 @@ struct RouteDetailView: View {
                         Button {
                             startCurrentDayRoute()
                         } label: {
-                            Label("Начать маршрут", systemImage: "play.fill")
+                            Label("Start Route", systemImage: "play.fill")
                                 .font(.headline)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -98,7 +98,7 @@ struct RouteDetailView: View {
                         }
                     }
 
-                    Text("Google Maps включает до четырёх остановок в одной ссылке. Для продолжения откройте следующую точку из NatureRouteAI.")
+                    Text("Google Maps supports up to four stops in one link. To continue, open the next stop from NatureRouteAI.")
                         .font(.caption)
                         .foregroundColor(.gray)
 
@@ -189,23 +189,23 @@ struct RouteDetailView: View {
                 .padding(.top, 60)
             }
         }
-        .confirmationDialog("Открыть навигацию", isPresented: $isShowingNavigationPicker, titleVisibility: .visible) {
+        .confirmationDialog("Choose a navigation app", isPresented: $isShowingNavigationPicker, titleVisibility: .visible) {
             ForEach(NavigationProvider.allCases) { provider in
                 Button(provider.title) {
                     openNavigation(using: provider)
                 }
             }
-            Button("Отмена", role: .cancel) { }
+            Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Маршрут откроется для режима «\(route.transportMode.displayName)».")
+            Text("The route will open in \(route.transportMode.displayName.lowercased()) mode.")
         }
-        .alert("Не удалось открыть навигатор", isPresented: Binding(
+        .alert("Couldn't Open Navigation", isPresented: Binding(
             get: { navigationError != nil },
             set: { if !$0 { navigationError = nil } }
         )) {
             Button("OK", role: .cancel) { navigationError = nil }
         } message: {
-            Text(navigationError ?? "Попробуйте ещё раз.")
+            Text(navigationError ?? "Please try again.")
         }
     }
 

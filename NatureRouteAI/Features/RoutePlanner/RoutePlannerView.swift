@@ -190,7 +190,7 @@ struct RoutePlannerView: View {
                         .cornerRadius(14)
                 }
 
-                if viewModel.isSaved {
+                if viewModel.isSaved(in: modelContext) {
                     Label("Route saved — find it in Saved Routes", systemImage: "checkmark.circle.fill")
                         .font(.subheadline)
                         .fontWeight(.semibold)

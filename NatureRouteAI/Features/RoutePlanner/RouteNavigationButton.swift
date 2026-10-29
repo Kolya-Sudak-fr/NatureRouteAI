@@ -12,7 +12,7 @@ struct RouteNavigationButton: View {
 
     var body: some View {
         Button(action: prepareRoute) {
-            Label("Начать навигацию", systemImage: "location.north.line.fill")
+            Label("Start Navigation", systemImage: "location.north.line.fill")
                 .font(.headline)
                 .fontWeight(.bold)
                 .foregroundColor(.black)
@@ -20,21 +20,21 @@ struct RouteNavigationButton: View {
                 .padding(.vertical, 14)
                 .background(green, in: RoundedRectangle(cornerRadius: 14))
         }
-        .confirmationDialog("Открыть навигацию", isPresented: $isChoosingProvider, titleVisibility: .visible) {
+        .confirmationDialog("Choose a navigation app", isPresented: $isChoosingProvider, titleVisibility: .visible) {
             ForEach(NavigationProvider.allCases) { provider in
                 Button(provider.title) { open(provider) }
             }
-            Button("Отмена", role: .cancel) { }
+            Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Откроется маршрут первого дня в режиме «\(route.transportMode.displayName)».")
+            Text("The first day's route will open in \(route.transportMode.displayName.lowercased()) mode.")
         }
-        .alert("Не удалось открыть навигатор", isPresented: Binding(
+        .alert("Couldn't Open Navigation", isPresented: Binding(
             get: { navigationError != nil },
             set: { if !$0 { navigationError = nil } }
         )) {
             Button("OK", role: .cancel) { navigationError = nil }
         } message: {
-            Text(navigationError ?? "Попробуйте ещё раз.")
+            Text(navigationError ?? "Please try again.")
         }
     }
 

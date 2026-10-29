@@ -34,9 +34,14 @@ class RoutePlannerViewModel: ObservableObject {
     private let generator = RouteGenerator()
     private var pendingRouteIDs: Set<UUID> = []
 
-    var isSaved: Bool {
+    func isSaved(in context: ModelContext) -> Bool {
         guard let route else { return false }
-        return savedRouteIDs.contains(route.id)
+        if savedRouteIDs.contains(route.id) { return true }
+        if pendingRouteIDs.contains(route.id) { return false }
+
+        let routeID = route.id
+        let descriptor = FetchDescriptor<Route>(predicate: #Predicate { $0.id == routeID })
+        return (try? context.fetch(descriptor).isEmpty) == false
     }
 
     // Вся логика генерации теперь здесь, не в View
@@ -54,6 +59,13 @@ class RoutePlannerViewModel: ObservableObject {
                     preferences: selectedPreferences.map { $0.title },
                     transport: transport
                 )
+                if let route {
+                    let requestedCount = tripDays * placesPerDay
+                    let availableCount = route.days.reduce(0) { $0 + $1.places.count }
+                    if availableCount < requestedCount {
+                        errorMessage = "Only \(availableCount) unique nature spots were found for \(requestedCount) requested places. This partial route keeps every stop unique."
+                    }
+                }
             } catch let appError as AppError {
                 errorMessage = appError.userMessage
             } catch let urlError as URLError where Self.isConnectionError(urlError) {
@@ -70,9 +82,21 @@ class RoutePlannerViewModel: ObservableObject {
         let routeID = sourceRoute.id
         guard !savedRouteIDs.contains(routeID) else { return }
 
-        // Не вставляем один объект повторно, если предыдущий context.save завершился ошибкой.
-        if pendingRouteIDs.insert(routeID).inserted {
+        // Detect routes already persisted by this or another ViewModel instance.
+        if !pendingRouteIDs.contains(routeID) {
+            let descriptor = FetchDescriptor<Route>(predicate: #Predicate { $0.id == routeID })
+            do {
+                if try !context.fetch(descriptor).isEmpty {
+                    savedRouteIDs.insert(routeID)
+                    return
+                }
+            } catch {
+                errorMessage = "Failed to check saved routes: \(error.localizedDescription)"
+                return
+            }
+
             context.insert(sourceRoute)
+            pendingRouteIDs.insert(routeID)
         }
 
         do {
