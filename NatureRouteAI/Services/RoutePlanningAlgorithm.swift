@@ -13,6 +13,11 @@ struct RoutePlaceCandidate: Equatable {
     let sourceOrder: Int
 }
 
+struct RoutePlanningResult {
+    let days: [[RoutePlaceCandidate]]
+    let requestLimitReached: Bool
+}
+
 enum RoutePlanningAlgorithm {
     private struct Coordinate {
         let latitude: Double
@@ -64,11 +69,17 @@ enum RoutePlanningAlgorithm {
         originLatitude: Double,
         originLongitude: Double,
         metricsProvider: RouteMetricsProviding
-    ) async -> [[RoutePlaceCandidate]] {
-        guard placesPerDay > 0 else { return Array(repeating: [], count: dayPreferences.count) }
+    ) async -> RoutePlanningResult {
+        guard placesPerDay > 0 else {
+            return RoutePlanningResult(
+                days: Array(repeating: [], count: dayPreferences.count),
+                requestLimitReached: false
+            )
+        }
 
         var remaining = uniqueCandidates(candidates)
         var days: [[RoutePlaceCandidate]] = []
+        var didReachRequestLimit = false
 
         for preference in dayPreferences {
             var day: [RoutePlaceCandidate] = []
@@ -79,10 +90,10 @@ enum RoutePlanningAlgorithm {
                 }
                 guard !eligible.isEmpty else { break }
 
-                let shortlist = eligible.sorted {
+                let sortedEligible = eligible.sorted {
                     preliminaryScore(remaining[$0], from: current, transport: transport)
                         < preliminaryScore(remaining[$1], from: current, transport: transport)
-                }.prefix(4)
+                }
 
                 var ranked: [(index: Int, metrics: RouteMetrics, score: Double)] = []
                 if transport == .publicTransport {
@@ -95,13 +106,35 @@ enum RoutePlanningAlgorithm {
                     }
                     continue
                 }
-                for index in shortlist {
-                    guard let metrics = try? await metricsProvider.metrics(
-                        from: current.latitude, longitude: current.longitude,
-                        to: remaining[index], transport: transport
-                    ), metrics.distanceMeters.isFinite, metrics.expectedTravelTime.isFinite,
-                       metrics.distanceMeters > 0, metrics.expectedTravelTime > 0 else { continue }
-                    ranked.append((index, metrics, actualScore(remaining[index], metrics: metrics, transport: transport)))
+
+                // Start with four geographically promising candidates. If none
+                // has a routable path, inspect the next batch instead of ending
+                // the day while usable candidates remain.
+                var batchStart = 0
+                var requestBudgetExhausted = false
+                while batchStart < sortedEligible.count, ranked.isEmpty, !requestBudgetExhausted {
+                    let batchEnd = min(batchStart + 4, sortedEligible.count)
+                    for index in sortedEligible[batchStart..<batchEnd] {
+                        do {
+                            let metrics = try await metricsProvider.metrics(
+                                from: current.latitude, longitude: current.longitude,
+                                to: remaining[index], transport: transport
+                            )
+                            guard metrics.distanceMeters.isFinite,
+                                  metrics.expectedTravelTime.isFinite,
+                                  metrics.distanceMeters > 0,
+                                  metrics.expectedTravelTime > 0 else { continue }
+                            ranked.append((index, metrics, actualScore(remaining[index], metrics: metrics, transport: transport)))
+                        } catch RouteMetricsError.requestLimitReached {
+                            requestBudgetExhausted = true
+                            didReachRequestLimit = true
+                            break
+                        } catch {
+                            continue
+                        }
+                    }
+                    if !ranked.isEmpty { break }
+                    batchStart = batchEnd
                 }
                 guard let best = ranked.min(by: { $0.score < $1.score }) else { break }
                 let next = remaining.remove(at: best.index)
@@ -112,7 +145,7 @@ enum RoutePlanningAlgorithm {
             days.append(day)
         }
 
-        return days
+        return RoutePlanningResult(days: days, requestLimitReached: didReachRequestLimit)
     }
 
     static func distanceMeters(_ first: RoutePlaceCandidate, _ second: RoutePlaceCandidate) -> Double {
@@ -157,7 +190,8 @@ enum RoutePlanningAlgorithm {
     }
 
     private static func qualityScore(_ candidate: RoutePlaceCandidate) -> Double {
-        Double(max(0, 3 - (candidate.quality ?? 0)))
+        guard let quality = candidate.quality else { return 0 }
+        return Double(max(0, 3 - quality))
     }
 
     private static func distanceMeters(

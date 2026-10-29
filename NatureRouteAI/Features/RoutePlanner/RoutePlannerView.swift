@@ -8,6 +8,13 @@ struct RoutePlannerView: View {
     @State private var showMapPreview = false
     @FocusState private var cityFocused: Bool
 
+    init(city: String = "", preselectedPreference: String? = nil) {
+        _viewModel = StateObject(wrappedValue: RoutePlannerViewModel(
+            initialCity: city,
+            initialPreference: preselectedPreference
+        ))
+    }
+
     // Единая палитра приложения
     private let darkBg = Color(red: 0.08, green: 0.10, blue: 0.08)
     private let cardBg = Color(red: 0.15, green: 0.18, blue: 0.15)
@@ -168,7 +175,10 @@ struct RoutePlannerView: View {
 
     // Поиск природных точек не меняется от выбранного транспорта.
     private var transportHint: String {
-        "Nature spots are searched within 50 km. Transport changes route directions only."
+        if viewModel.transport == .publicTransport {
+            return "Nature spots are searched within 50 km. Check public transport directions in an external navigation app."
+        }
+        return "Nature spots are searched within 50 km. Apple Maps travel distance and time help choose the stop order."
     }
 
     // MARK: - Bottom action buttons

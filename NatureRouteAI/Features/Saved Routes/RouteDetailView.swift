@@ -8,7 +8,6 @@ struct RouteDetailView: View {
     @State private var showMap = false
     @State private var isShowingNavigationPicker = false
     @State private var pendingStops: [NavigationStop] = []
-    @State private var pendingProgressIndex: Int?
     @State private var navigationError: String?
     @AppStorage private var nextStopIndex: Int
 
@@ -63,9 +62,9 @@ struct RouteDetailView: View {
                     if let nextStop = orderedPlaces[safe: nextStopIndex] {
                         VStack(spacing: 10) {
                             Button {
-                                prepareNavigation(to: nextStop, progressIndex: nextStopIndex)
+                                prepareNavigation(to: [nextStop])
                             } label: {
-                                Label("Next Stop", systemImage: "arrow.turn.up.right")
+                                Label("Navigate to Next Stop", systemImage: "arrow.turn.up.right")
                                     .font(.headline)
                                     .fontWeight(.bold)
                                     .foregroundColor(.black)
@@ -78,6 +77,16 @@ struct RouteDetailView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Button {
+                                nextStopIndex = min(nextStopIndex + 1, orderedPlaces.count)
+                            } label: {
+                                Label("Mark as Visited", systemImage: "checkmark.circle")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(green)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                            }
                         }
                     } else {
                         Label("All stops visited", systemImage: "checkmark.circle.fill")
@@ -137,7 +146,7 @@ struct RouteDetailView: View {
                                             .font(.caption)
                                             .foregroundColor(.gray)
                                         Button {
-                                            prepareNavigation(to: place, progressIndex: nil)
+                                            prepareNavigation(to: [place])
                                         } label: {
                                             Image(systemName: "arrow.turn.up.right")
                                                 .foregroundColor(green)
@@ -213,10 +222,6 @@ struct RouteDetailView: View {
         route.days.reduce(0) { $0 + $1.places.count }
     }
 
-    private func prepareNavigation(to place: Place, progressIndex: Int?) {
-        prepareNavigation(to: [place], progressIndex: progressIndex)
-    }
-
     private func startCurrentDayRoute() {
         guard let currentPlace = orderedPlaces[safe: nextStopIndex],
               let day = orderedDays.first(where: { $0.places.contains(where: { $0.id == currentPlace.id }) }),
@@ -224,16 +229,15 @@ struct RouteDetailView: View {
             navigationError = NavigationLinkError.noStops.localizedDescription
             return
         }
-        prepareNavigation(to: Array(day.places.dropFirst(startIndex)), progressIndex: nextStopIndex)
+        prepareNavigation(to: Array(day.places.dropFirst(startIndex)))
     }
 
-    private func prepareNavigation(to places: [Place], progressIndex: Int?) {
+    private func prepareNavigation(to places: [Place]) {
         do {
             pendingStops = try places.map {
                 try NavigationStop(name: $0.name, latitude: $0.latitude, longitude: $0.longitude)
             }
             guard !pendingStops.isEmpty else { throw NavigationLinkError.noStops }
-            pendingProgressIndex = progressIndex
             isShowingNavigationPicker = true
         } catch {
             navigationError = error.localizedDescription
@@ -252,9 +256,6 @@ struct RouteDetailView: View {
                 guard didOpen else {
                     navigationError = "\(provider.title) is unavailable. Check the link and try again."
                     return
-                }
-                if let pendingProgressIndex {
-                    nextStopIndex = pendingProgressIndex + 1
                 }
             }
         } catch {

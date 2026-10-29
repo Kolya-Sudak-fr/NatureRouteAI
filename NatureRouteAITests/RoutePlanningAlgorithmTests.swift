@@ -3,56 +3,59 @@ import XCTest
 
 @MainActor
 final class RoutePlanningAlgorithmTests: XCTestCase {
-    func testDuplicateExternalIDIsNotAssignedAcrossDifferentDays() {
+    func testDuplicateExternalIDIsNotAssignedAcrossDifferentDays() async {
         let samePlaceDayOne = candidate(id: "xid-1", name: "Lake", longitude: 0.01, preferences: ["Lakes"])
         let samePlaceDayTwo = candidate(id: "XID-1", name: "Lake viewpoint", longitude: 0.01, preferences: ["Forest"])
 
-        let days = RoutePlanningAlgorithm.distribute(
+        let result = await RoutePlanningAlgorithm.distribute(
             candidates: [samePlaceDayOne, samePlaceDayTwo],
             dayPreferences: ["Lakes", "Forest"],
             placesPerDay: 1,
             transport: .walking,
             originLatitude: 0,
-            originLongitude: 0
+            originLongitude: 0,
+            metricsProvider: TestRouteMetricsProvider()
         )
 
-        XCTAssertEqual(days.flatMap { $0 }.count, 1)
-        XCTAssertEqual(days[0].map(\.externalID), ["xid-1"])
-        XCTAssertTrue(days[1].isEmpty)
+        XCTAssertEqual(result.days.flatMap { $0 }.count, 1)
+        XCTAssertEqual(result.days[0].map(\.externalID), ["xid-1"])
+        XCTAssertTrue(result.days[1].isEmpty)
     }
 
-    func testInsufficientUniquePlacesReturnsPartialRouteWithoutRepeating() {
-        let days = RoutePlanningAlgorithm.distribute(
+    func testInsufficientUniquePlacesReturnsPartialRouteWithoutRepeating() async {
+        let result = await RoutePlanningAlgorithm.distribute(
             candidates: [candidate(id: "only", name: "One spot", longitude: 0.01, preferences: ["Lake"])],
             dayPreferences: ["Lake", "Lake"],
             placesPerDay: 2,
             transport: .walking,
             originLatitude: 0,
-            originLongitude: 0
+            originLongitude: 0,
+            metricsProvider: TestRouteMetricsProvider()
         )
 
-        XCTAssertEqual(days.count, 2)
-        XCTAssertEqual(days.flatMap { $0 }.count, 1)
-        XCTAssertEqual(days[0].count, 1)
-        XCTAssertTrue(days[1].isEmpty)
+        XCTAssertEqual(result.days.count, 2)
+        XCTAssertEqual(result.days.flatMap { $0 }.count, 1)
+        XCTAssertEqual(result.days[0].count, 1)
+        XCTAssertTrue(result.days[1].isEmpty)
     }
 
-    func testRepeatedPreferenceAcrossDaysUsesDifferentPlaces() {
+    func testRepeatedPreferenceAcrossDaysUsesDifferentPlaces() async {
         let places = (1...4).map {
             candidate(id: "lake-\($0)", name: "Lake \($0)", longitude: Double($0) * 0.01, preferences: ["Lake"])
         }
 
-        let days = RoutePlanningAlgorithm.distribute(
+        let result = await RoutePlanningAlgorithm.distribute(
             candidates: places,
             dayPreferences: ["Lake", "Lake"],
             placesPerDay: 2,
             transport: .cycling,
             originLatitude: 0,
-            originLongitude: 0
+            originLongitude: 0,
+            metricsProvider: TestRouteMetricsProvider()
         )
 
-        XCTAssertEqual(days.map(\.count), [2, 2])
-        XCTAssertEqual(Set(days.flatMap { $0 }.compactMap(\.externalID)).count, 4)
+        XCTAssertEqual(result.days.map(\.count), [2, 2])
+        XCTAssertEqual(Set(result.days.flatMap { $0 }.compactMap(\.externalID)).count, 4)
     }
 
     func testTransportModesHaveTheirConfiguredPreferredRanges() {
@@ -62,7 +65,7 @@ final class RoutePlanningAlgorithmTests: XCTestCase {
         XCTAssertEqual(TransportMode.publicTransport.preferredStopDistanceKilometers, 2...15)
     }
 
-    func testTransportModeChangesWhichSpacingCandidateIsPreferred() {
+    func testTransportModeChangesWhichSpacingCandidateIsPreferred() async {
         let expectations: [(TransportMode, Double, Double)] = [
             (.walking, 1, 5),
             (.cycling, 5, 1),
@@ -80,33 +83,51 @@ final class RoutePlanningAlgorithmTests: XCTestCase {
                 )
             }
 
-            let day = RoutePlanningAlgorithm.distribute(
+            let provider = TestRouteMetricsProvider(preferredCandidateIDByMode: [mode.rawValue: "\(mode.rawValue)-0"])
+            let result = await RoutePlanningAlgorithm.distribute(
                 candidates: candidates,
                 dayPreferences: ["Nature"],
                 placesPerDay: 1,
                 transport: mode,
                 originLatitude: 0,
-                originLongitude: 0
-            )[0]
+                originLongitude: 0,
+                metricsProvider: provider
+            )
 
-            XCTAssertEqual(day.first?.externalID, "\(mode.rawValue)-0", "Unexpected spacing choice for \(mode)")
+            XCTAssertEqual(result.days[0].first?.externalID, "\(mode.rawValue)-0", "Unexpected spacing choice for \(mode)")
         }
     }
 
-    func testBestAvailableAttractionOutsidePreferredRangeRemainsEligible() {
+    func testBestAvailableAttractionOutsidePreferredRangeRemainsEligible() async {
         let farSpot = candidate(id: "far", name: "Remote park", longitude: 30.0 / 111.195, preferences: ["Park"], quality: 3)
 
-        let days = RoutePlanningAlgorithm.distribute(
+        let result = await RoutePlanningAlgorithm.distribute(
             candidates: [farSpot],
             dayPreferences: ["Park"],
             placesPerDay: 1,
             transport: .car,
             originLatitude: 0,
-            originLongitude: 0
+            originLongitude: 0,
+            metricsProvider: TestRouteMetricsProvider()
         )
 
-        XCTAssertEqual(days[0].map(\.externalID), ["far"])
-        XCTAssertGreaterThan(RoutePlanningAlgorithm.distanceMeters(days[0][0], candidate(id: "origin", name: "Origin", longitude: 0, preferences: [])) / 1_000, TransportMode.car.preferredStopDistanceKilometers.upperBound)
+        XCTAssertEqual(result.days[0].map(\.externalID), ["far"])
+        XCTAssertGreaterThan(RoutePlanningAlgorithm.distanceMeters(result.days[0][0], candidate(id: "origin", name: "Origin", longitude: 0, preferences: [])) / 1_000, TransportMode.car.preferredStopDistanceKilometers.upperBound)
+    }
+
+    func testRequestLimitIsReportedWhenNoRouteCouldBeConfirmed() async {
+        let result = await RoutePlanningAlgorithm.distribute(
+            candidates: [candidate(id: "limited", name: "Limited spot", longitude: 0.01, preferences: ["Nature"])],
+            dayPreferences: ["Nature"],
+            placesPerDay: 1,
+            transport: .walking,
+            originLatitude: 0,
+            originLongitude: 0,
+            metricsProvider: TestRouteMetricsProvider(requestLimit: 0)
+        )
+
+        XCTAssertTrue(result.requestLimitReached)
+        XCTAssertTrue(result.days.flatMap { $0 }.isEmpty)
     }
 
     func testSimilarNamesWithDifferentIDsRemainDistinct() {
@@ -147,5 +168,37 @@ final class RoutePlanningAlgorithmTests: XCTestCase {
             quality: quality,
             sourceOrder: 0
         )
+    }
+}
+
+@MainActor
+private final class TestRouteMetricsProvider: RouteMetricsProviding {
+    private let preferredCandidateIDByMode: [String: String]
+    private let requestLimit: Int?
+    private var requestCount = 0
+
+    init(preferredCandidateIDByMode: [String: String] = [:], requestLimit: Int? = nil) {
+        self.preferredCandidateIDByMode = preferredCandidateIDByMode
+        self.requestLimit = requestLimit
+    }
+
+    func metrics(from latitude: Double, longitude: Double, to candidate: RoutePlaceCandidate, transport: TransportMode) async throws -> RouteMetrics {
+        if let requestLimit, requestCount >= requestLimit {
+            throw RouteMetricsError.requestLimitReached
+        }
+        requestCount += 1
+        let lat = (candidate.latitude - latitude) * 111_195
+        let lon = (candidate.longitude - longitude) * 111_195
+        let distance = hypot(lat, lon)
+        let speed: Double = switch transport {
+        case .walking: 1.2
+        case .cycling: 4.0
+        case .car: 11.0
+        case .publicTransport: throw RouteMetricsError.unsupportedTransport
+        }
+        let time = preferredCandidateIDByMode[transport.rawValue] == candidate.externalID
+            ? 1
+            : distance / speed
+        return RouteMetrics(distanceMeters: distance, expectedTravelTime: time)
     }
 }

@@ -4,6 +4,8 @@ enum AppError: Error {
 
     case cityNotFound
     case noPlacesFound
+    case noRouteablePlaces
+    case routePlanningLimitReached
     case invalidRouteRequest
     case noInternetConnection
     case serverError(Int)
@@ -15,6 +17,10 @@ enum AppError: Error {
             return "City not found. Check the spelling and try again."
         case .noPlacesFound:
             return "No nature spots found in this area. Try a different city or different preferences."
+        case .noRouteablePlaces:
+            return "Nature spots were found, but Apple Maps couldn't calculate travel routes to them. Try another city or transport mode."
+        case .routePlanningLimitReached:
+            return "Nature spots were found, but the route-planning request limit was reached before a usable route could be confirmed. Try fewer places or another city."
         case .invalidRouteRequest:
             return "Choose at least one nature preference and a valid trip length before generating a route."
         case .noInternetConnection:

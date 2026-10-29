@@ -1,14 +1,15 @@
 import Foundation
 import CoreLocation
 
+@MainActor
 class RouteGenerator {
     
     private let networkService = NetworkService()
     private let metricsProvider: RouteMetricsProviding
     private let placeSearchRadiusMeters = 50_000
 
-    init(metricsProvider: RouteMetricsProviding = MapKitRouteMetricsService()) {
-        self.metricsProvider = metricsProvider
+    init(metricsProvider: RouteMetricsProviding? = nil) {
+        self.metricsProvider = metricsProvider ?? MapKitRouteMetricsService()
     }
     
     // Маппинг предпочтений пользователя в категории OpenTripMap
@@ -33,6 +34,7 @@ class RouteGenerator {
         guard days > 0, placesPerDay > 0, !preferences.isEmpty else {
             throw AppError.invalidRouteRequest
         }
+        metricsProvider.beginPlanningSession()
         
         // Шаг 1 — получаем реальные координаты города
         let cityCoord = try await networkService.fetchCityCoordinate(city: city)
@@ -72,7 +74,7 @@ class RouteGenerator {
             throw firstSearchError
         }
 
-        let plannedPlaces = await RoutePlanningAlgorithm.distribute(
+        let planningResult = await RoutePlanningAlgorithm.distribute(
             candidates: candidates,
             dayPreferences: dayPreferences,
             placesPerDay: placesPerDay,
@@ -81,7 +83,7 @@ class RouteGenerator {
             originLongitude: cityCoord.lon,
             metricsProvider: metricsProvider
         )
-        let routeDays = plannedPlaces.enumerated().map { index, candidates in
+        let routeDays = planningResult.days.enumerated().map { index, candidates in
             RouteDay(
                 dayNumber: index + 1,
                 places: candidates.map {
@@ -97,6 +99,12 @@ class RouteGenerator {
         }
 
         guard routeDays.contains(where: { !$0.places.isEmpty }) else {
+            if planningResult.requestLimitReached {
+                throw AppError.routePlanningLimitReached
+            }
+            if !candidates.isEmpty, transport != .publicTransport {
+                throw AppError.noRouteablePlaces
+            }
             throw AppError.noPlacesFound
         }
 

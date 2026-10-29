@@ -2,31 +2,37 @@ import SwiftUI
 import SwiftData
 
 struct SavedRoutesView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
     @Query(sort: \Route.createdAt, order: .reverse) private var routes: [Route]
     @State private var routeToDelete: Route?
     @State private var isShowingDeleteConfirmation = false
     @State private var deletionError: String?
 
-    private let darkBg = Color(red: 0.08, green: 0.10, blue: 0.08)
-    private let cardBg = Color(red: 0.15, green: 0.18, blue: 0.15)
+    private var screenBackground: Color {
+        colorScheme == .dark
+            ? Color(red: 0.08, green: 0.10, blue: 0.08)
+            : Color(red: 0.96, green: 0.97, blue: 0.95)
+    }
     private let green = Color(red: 0.2, green: 0.85, blue: 0.4)
 
     var body: some View {
         ZStack {
-            darkBg.ignoresSafeArea()
+            screenBackground.ignoresSafeArea()
             if routes.isEmpty {
                 ContentUnavailableView {
                     Label("No saved routes", systemImage: "map")
                 } description: {
-                    Text("Create a nature trip and save it to see it here.")
+                    Text("Plan a nature trip and save it to build your collection.")
                 } actions: {
-                    Button("Back to route planning") { dismiss() }
-                        .buttonStyle(.borderedProminent)
-                        .tint(green)
+                    NavigationLink {
+                        RoutePlannerView()
+                    } label: {
+                        Label("Plan a Route", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(green)
                 }
-                .foregroundStyle(.white)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 14) {
@@ -50,12 +56,13 @@ struct SavedRoutesView: View {
                                     Image(systemName: "ellipsis")
                                         .font(.headline)
                                         .foregroundStyle(.secondary)
-                                        .frame(width: 36, height: 44)
+                                        .frame(width: 44, height: 44)
                                         .contentShape(Rectangle())
                                 }
                                 .accessibilityLabel("Actions for \(route.city ?? "route")")
                             }
                         }
+                        recommendations
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 16)
@@ -67,12 +74,26 @@ struct SavedRoutesView: View {
                 Text("Saved Routes")
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.75)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    RoutePlannerView()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.black)
+                        .frame(width: 34, height: 34)
+                        .background(green, in: Circle())
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .accessibilityLabel("Create a new route")
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(darkBg, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(screenBackground, for: .navigationBar)
+        .toolbarColorScheme(colorScheme == .dark ? .dark : .light, for: .navigationBar)
         .confirmationDialog(
             "Delete this route?",
             isPresented: $isShowingDeleteConfirmation,
@@ -98,13 +119,106 @@ struct SavedRoutesView: View {
 
     private func delete(_ route: Route) {
         do {
-            try modelContext.transaction {
-                modelContext.delete(route)
-            }
+            try SavedRouteStore.delete(route, from: modelContext)
             routeToDelete = nil
         } catch {
             deletionError = error.localizedDescription
         }
+    }
+
+    @ViewBuilder
+    private var recommendations: some View {
+        let suggestions = ForYouSuggestion.from(routes: routes)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("For You")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text("Ideas based on the nature in your saved routes.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if suggestions.isEmpty {
+                ContentUnavailableView("No recommendations yet", systemImage: "sparkles", description: Text("Save a route to get ideas based on its nature spots."))
+                    .frame(minHeight: 140)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(suggestions) { suggestion in
+                            NavigationLink {
+                                RoutePlannerView(city: suggestion.city, preselectedPreference: suggestion.preference)
+                            } label: {
+                                ForYouCard(suggestion: suggestion)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 24)
+    }
+}
+
+struct ForYouSuggestion: Identifiable {
+    let city: String
+    let preference: String
+    let symbol: String
+    var id: String { "\(city.lowercased())-\(preference)" }
+
+    static func from(routes: [Route]) -> [ForYouSuggestion] {
+        var seen = Set<String>()
+        return routes.flatMap { route -> [ForYouSuggestion] in
+            let city = route.city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !city.isEmpty else { return [] }
+            let types = Set(route.days.flatMap(\.places).map(\.type))
+            return types.sorted().compactMap { type -> ForYouSuggestion? in
+                let value: (String, String)?
+                switch type {
+                case "mountain_peaks": value = ("Mountains", "mountain.2.fill")
+                case "nature_reserves": value = ("Forest", "tree.fill")
+                case "water": value = ("Lakes", "water.waves")
+                case "waterfalls": value = ("Waterfalls", "water.waves")
+                case "national_parks": value = ("National Parks", "leaf.fill")
+                default: value = nil
+                }
+                guard let value else { return nil }
+                let key = "\(city.lowercased())-\(value.0)"
+                guard seen.insert(key).inserted else { return nil }
+                return ForYouSuggestion(city: city, preference: value.0, symbol: value.1)
+            }
+        }
+    }
+}
+
+private struct ForYouCard: View {
+    let suggestion: ForYouSuggestion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: suggestion.symbol)
+                .font(.title2)
+                .foregroundStyle(.green)
+                .frame(width: 46, height: 46)
+                .background(.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 13))
+            Text("Explore \(suggestion.preference.lowercased())")
+                .font(.headline)
+                .foregroundStyle(.primary)
+            Text("Inspired by your saved trips in \(suggestion.city)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Label("Plan a trip", systemImage: "arrow.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.green)
+        }
+        .frame(width: 190, alignment: .leading)
+        .padding(14)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens route planning with this city and nature preference selected")
     }
 }
 
@@ -116,16 +230,24 @@ struct RouteCard: View {
     }
 
     private var categories: [String] {
-        Array(Set(route.days.flatMap(\.places).map(\.type))).sorted().prefix(2).map(Self.readableCategory)
+        SavedRouteCardPresentation.categories(for: route)
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            RouteThumbnail(route: route)
-                .frame(width: 88, height: 96)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        ViewThatFits(in: .horizontal) {
+            cardContent(imageSide: 88, compact: false)
+            cardContent(imageSide: 68, compact: true)
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 7) {
+    private func cardContent(imageSide: CGFloat, compact: Bool) -> some View {
+        HStack(spacing: compact ? 9 : 12) {
+            RouteThumbnail(route: route)
+                .frame(width: imageSide, height: imageSide)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: compact ? 5 : 7) {
                 Text(route.city ?? "Nature Route")
                     .font(.headline)
                     .foregroundStyle(.primary)
@@ -135,17 +257,22 @@ struct RouteCard: View {
                 Text(categories.isEmpty ? "Nature getaway" : categories.joined(separator: " · "))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(compact ? 1 : 2)
+                    .truncationMode(.tail)
 
                 ViewThatFits(in: .horizontal) {
                     metadata(compact: false)
                     metadata(compact: true)
                 }
+
+                Text(route.createdAt.formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
+        .padding(compact ? 10 : 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
@@ -156,14 +283,53 @@ struct RouteCard: View {
     }
 
     private func metadata(compact: Bool) -> some View {
-        HStack(spacing: compact ? 7 : 11) {
-            Label("\(route.days.count)d", systemImage: "calendar")
-            Label("\(totalPlaces)", systemImage: "mappin.and.ellipse")
-            Label(route.transportMode.displayName, systemImage: route.transportMode.systemIcon)
+        Group {
+            if compact {
+                HStack(spacing: 8) {
+                    Label("\(route.days.count) days", systemImage: "calendar")
+                    Label("\(totalPlaces) places", systemImage: "mappin.and.ellipse")
+                }
                 .lineLimit(1)
+            } else {
+                HStack(spacing: 11) {
+                    Label("\(route.days.count) days", systemImage: "calendar")
+                    Label("\(totalPlaces) places", systemImage: "mappin.and.ellipse")
+                    Label(route.transportMode.displayName, systemImage: route.transportMode.systemIcon)
+                        .lineLimit(1)
+                }
+                .lineLimit(1)
+            }
         }
-        .font(.caption2.weight(.medium))
+        .font(.caption.weight(.medium))
         .foregroundStyle(.secondary)
+    }
+
+}
+
+enum SavedRouteCardPresentation {
+    static func categories(for route: Route) -> [String] {
+        Array(Set(route.days.flatMap(\.places).map(\.type))).sorted().prefix(2).map(readableCategory)
+    }
+
+    static func imageSymbol(for route: Route) -> String {
+        let types = Set(route.days.flatMap(\.places).map(\.type))
+        let symbols: [String]
+        if types.contains("waterfalls") || types.contains("water") { symbols = ["water.waves", "drop.fill", "humidity.fill"] }
+        else if types.contains("mountain_peaks") { symbols = ["mountain.2.fill", "mountain.2", "sun.horizon.fill"] }
+        else if types.contains("nature_reserves") || types.contains("national_parks") { symbols = ["tree.fill", "leaf.fill", "tree"] }
+        else { symbols = ["leaf.fill", "globe.europe.africa.fill", "sun.max.fill"] }
+        let seed = Int(UInt32(String(route.id.uuidString.last ?? "0"), radix: 16) ?? 0)
+        return symbols[seed % symbols.count]
+    }
+
+    static func gradientColors(for route: Route) -> [Color] {
+        let palettes: [[Color]] = [
+            [.green.opacity(0.32), .teal.opacity(0.18), .primary.opacity(0.05)],
+            [.blue.opacity(0.28), .cyan.opacity(0.17), .primary.opacity(0.05)],
+            [.orange.opacity(0.24), .green.opacity(0.18), .primary.opacity(0.05)]
+        ]
+        let seed = Int(UInt32(String(route.id.uuidString.last ?? "0"), radix: 16) ?? 0)
+        return palettes[seed % palettes.count]
     }
 
     private static func readableCategory(_ type: String) -> String {
@@ -181,22 +347,14 @@ struct RouteCard: View {
 private struct RouteThumbnail: View {
     let route: Route
 
-    private var symbol: String {
-        let types = Set(route.days.flatMap(\.places).map(\.type))
-        if types.contains("waterfalls") || types.contains("water") { return "water.waves" }
-        if types.contains("mountain_peaks") { return "mountain.2.fill" }
-        if types.contains("nature_reserves") || types.contains("national_parks") { return "tree.fill" }
-        return "leaf.fill"
-    }
-
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color.green.opacity(0.28), Color.teal.opacity(0.12), Color.primary.opacity(0.05)],
+                colors: SavedRouteCardPresentation.gradientColors(for: route),
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: symbol)
+            Image(systemName: SavedRouteCardPresentation.imageSymbol(for: route))
                 .font(.system(size: 30, weight: .medium))
                 .foregroundStyle(.green)
                 .accessibilityHidden(true)

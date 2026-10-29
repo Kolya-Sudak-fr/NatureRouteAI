@@ -9,7 +9,13 @@ struct RouteMetrics: Equatable {
 
 @MainActor
 protocol RouteMetricsProviding {
+    func beginPlanningSession()
     func metrics(from latitude: Double, longitude: Double, to candidate: RoutePlaceCandidate, transport: TransportMode) async throws -> RouteMetrics
+}
+
+@MainActor
+extension RouteMetricsProviding {
+    func beginPlanningSession() { }
 }
 
 enum RouteMetricsError: Error {
@@ -32,7 +38,12 @@ final class MapKitRouteMetricsService: RouteMetricsProviding {
     private var requestCount = 0
     private var cache: [Key: RouteMetrics] = [:]
 
-    init(requestLimit: Int = 40) { self.requestLimit = requestLimit }
+    init(requestLimit: Int = 40) { self.requestLimit = max(0, requestLimit) }
+
+    func beginPlanningSession() {
+        requestCount = 0
+        cache.removeAll(keepingCapacity: true)
+    }
 
     func metrics(from latitude: Double, longitude: Double, to candidate: RoutePlaceCandidate, transport: TransportMode) async throws -> RouteMetrics {
         let key = Key(fromLatitude: latitude, fromLongitude: longitude, toLatitude: candidate.latitude, toLongitude: candidate.longitude, transport: transport)
