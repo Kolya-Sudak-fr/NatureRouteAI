@@ -3,6 +3,7 @@ import SwiftData
 import MapKit
 
 struct RoutePlannerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.modelContext) private var modelContext
     @StateObject private var viewModel = RoutePlannerViewModel()
     @State private var showMapPreview = false
@@ -109,7 +110,7 @@ struct RoutePlannerView: View {
                                 green: green,
                                 onTap: { newValue in
                                     if let index = viewModel.preferences.firstIndex(where: { $0.id == preference.id }) {
-                                        viewModel.preferences[index].isSelected = newValue
+                                        viewModel.setPreferenceSelection(at: index, isSelected: newValue)
                                     }
                                 }
                             )
@@ -135,6 +136,7 @@ struct RoutePlannerView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.orange.opacity(0.12))
                         .cornerRadius(12)
+                        .transition(.opacity)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -143,6 +145,8 @@ struct RoutePlannerView: View {
             .background(darkBg.ignoresSafeArea())
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom) { bottomButtons }
+            .animation(RouteMotion.animation(RouteMotion.reveal, reduceMotion: reduceMotion), value: viewModel.route?.id)
+            .animation(RouteMotion.animation(RouteMotion.quick, reduceMotion: reduceMotion), value: viewModel.errorMessage)
             .navigationTitle("New Route")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(darkBg, for: .navigationBar)
@@ -209,11 +213,14 @@ struct RoutePlannerView: View {
                         .padding(.vertical, 14)
                         .background(green.opacity(0.15))
                         .cornerRadius(14)
+                        .transition(RouteMotion.transition(reduceMotion: reduceMotion))
                 } else {
                     Button {
-                        viewModel.saveRoute(context: modelContext)
+                        withAnimation(RouteMotion.animation(RouteMotion.selection, reduceMotion: reduceMotion)) {
+                            viewModel.saveRoute(context: modelContext)
+                        }
                     } label: {
-                        Text("Save Route")
+                            Label("Save Route", systemImage: "bookmark")
                             .font(.headline)
                             .fontWeight(.bold)
                             .foregroundColor(.black)
@@ -222,20 +229,29 @@ struct RoutePlannerView: View {
                             .background(green)
                             .cornerRadius(14)
                     }
+                    .transition(.opacity)
                 }
             }
 
             if viewModel.isLoading {
                 HStack(spacing: 12) {
                     ProgressView().tint(.black)
-                    Text("Searching for nature...")
+                    Text(viewModel.isCancelling ? "Stopping route search..." : "Searching for nature...")
                         .font(.headline)
                         .foregroundColor(.black)
+                        .contentTransition(.opacity)
+                    Spacer(minLength: 0)
+                    Button(viewModel.isCancelling ? "Stopping" : "Cancel") { viewModel.cancelGeneration() }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.black)
+                        .disabled(viewModel.isCancelling)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
+                .padding(.horizontal, 16)
                 .background(green)
                 .cornerRadius(14)
+                .transition(.opacity)
             } else {
                 Button {
                     viewModel.generateRoute()
@@ -250,8 +266,10 @@ struct RoutePlannerView: View {
                         .cornerRadius(14)
                 }
                 .disabled(!viewModel.canGenerate)
+                .transition(.opacity)
             }
         }
+        .animation(RouteMotion.animation(RouteMotion.quick, reduceMotion: reduceMotion), value: viewModel.isLoading)
         .padding(.horizontal, 20)
         .padding(.top, 10)
         .padding(.bottom, 10)
@@ -310,6 +328,7 @@ struct StepperRow: View {
 
 // MARK: - Transport chip (selection button)
 struct TransportChip: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let mode: TransportMode
     let isSelected: Bool
     let green: Color
@@ -337,7 +356,8 @@ struct TransportChip: View {
             )
         }
         .buttonStyle(.plain)
-        .animation(.spring(duration: 0.25), value: isSelected)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .animation(RouteMotion.animation(RouteMotion.selection, reduceMotion: reduceMotion), value: isSelected)
     }
 }
 

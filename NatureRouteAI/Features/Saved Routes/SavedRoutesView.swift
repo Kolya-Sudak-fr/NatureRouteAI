@@ -2,12 +2,17 @@ import SwiftUI
 import SwiftData
 
 struct SavedRoutesView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Route.createdAt, order: .reverse) private var routes: [Route]
-    @State private var routeToDelete: Route?
-    @State private var isShowingDeleteConfirmation = false
+    @State private var deletionConfirmation = SavedRouteDeletionConfirmation()
     @State private var deletionError: String?
+    @State private var removedRouteIDs: Set<UUID> = []
+
+    private var visibleRoutes: [Route] {
+        routes.filter { !removedRouteIDs.contains($0.id) }
+    }
 
     private var screenBackground: Color {
         colorScheme == .dark
@@ -19,7 +24,7 @@ struct SavedRoutesView: View {
     var body: some View {
         ZStack {
             screenBackground.ignoresSafeArea()
-            if routes.isEmpty {
+            if visibleRoutes.isEmpty {
                 ContentUnavailableView {
                     Label("No saved routes", systemImage: "map")
                 } description: {
@@ -36,7 +41,7 @@ struct SavedRoutesView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 14) {
-                        ForEach(routes) { route in
+                        ForEach(visibleRoutes) { route in
                             HStack(spacing: 10) {
                                 NavigationLink {
                                     RouteDetailView(route: route)
@@ -47,8 +52,7 @@ struct SavedRoutesView: View {
 
                                 Menu {
                                     Button(role: .destructive) {
-                                        routeToDelete = route
-                                        isShowingDeleteConfirmation = true
+                                        deletionConfirmation.present(route)
                                     } label: {
                                         Label("Delete Route", systemImage: "trash")
                                     }
@@ -61,6 +65,7 @@ struct SavedRoutesView: View {
                                 }
                                 .accessibilityLabel("Actions for \(route.city ?? "route")")
                             }
+                            .transition(RouteMotion.transition(reduceMotion: reduceMotion))
                         }
                         recommendations
                     }
@@ -94,16 +99,17 @@ struct SavedRoutesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(screenBackground, for: .navigationBar)
         .toolbarColorScheme(colorScheme == .dark ? .dark : .light, for: .navigationBar)
+        .animation(RouteMotion.animation(RouteMotion.reveal, reduceMotion: reduceMotion), value: visibleRoutes.map(\.id))
         .confirmationDialog(
             "Delete this route?",
-            isPresented: $isShowingDeleteConfirmation,
+            isPresented: $deletionConfirmation.isPresented,
             titleVisibility: .visible,
-            presenting: routeToDelete
+            presenting: deletionConfirmation.route
         ) { route in
             Button("Delete \(route.city ?? "Route")", role: .destructive) {
                 delete(route)
             }
-            Button("Cancel", role: .cancel) { routeToDelete = nil }
+            Button("Cancel", role: .cancel) { deletionConfirmation.cancel() }
         } message: { route in
             Text("\(route.city ?? "This route") and its days and stops will be removed from Saved Routes.")
         }
@@ -120,7 +126,10 @@ struct SavedRoutesView: View {
     private func delete(_ route: Route) {
         do {
             try SavedRouteStore.delete(route, from: modelContext)
-            routeToDelete = nil
+            deletionConfirmation.cancel()
+            withAnimation(RouteMotion.animation(RouteMotion.reveal, reduceMotion: reduceMotion)) {
+                removedRouteIDs.insert(route.id)
+            }
         } catch {
             deletionError = error.localizedDescription
         }
@@ -128,7 +137,7 @@ struct SavedRoutesView: View {
 
     @ViewBuilder
     private var recommendations: some View {
-        let suggestions = ForYouSuggestion.from(routes: routes)
+        let suggestions = ForYouSuggestion.from(routes: visibleRoutes)
         VStack(alignment: .leading, spacing: 12) {
             Text("For You")
                 .font(.title3.weight(.semibold))
@@ -159,6 +168,21 @@ struct SavedRoutesView: View {
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 24)
+    }
+}
+
+struct SavedRouteDeletionConfirmation {
+    var route: Route?
+    var isPresented = false
+
+    mutating func present(_ route: Route) {
+        self.route = route
+        isPresented = true
+    }
+
+    mutating func cancel() {
+        route = nil
+        isPresented = false
     }
 }
 

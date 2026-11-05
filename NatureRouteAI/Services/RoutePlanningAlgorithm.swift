@@ -3,7 +3,7 @@ import Foundation
 /// A place returned by a category search. OpenTripMap's `xid` is kept while
 /// planning so the same real-world place can be recognized across searches.
 struct RoutePlaceCandidate: Equatable {
-    let externalID: String?
+    var externalID: String?
     let name: String
     let type: String
     let latitude: Double
@@ -29,35 +29,46 @@ enum RoutePlanningAlgorithm {
         var indexByExternalID: [String: Int] = [:]
 
         for candidate in candidates {
-            let externalID = candidate.externalID?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            if let externalID, !externalID.isEmpty,
+            let externalID = normalizedID(candidate.externalID)
+            if let externalID,
                let existingIndex = indexByExternalID[externalID] {
                 result[existingIndex].preferences.formUnion(candidate.preferences)
                 continue
             }
 
-            // Some API responses omit xid. In that case only near-identical
-            // coordinates are treated as the same place; names are never used.
-            if externalID == nil || externalID?.isEmpty == true,
-               let existingIndex = result.firstIndex(where: {
-                   let existingID = $0.externalID?.trimmingCharacters(in: .whitespacesAndNewlines)
-                   return (existingID == nil || existingID?.isEmpty == true)
-                       && distanceMeters($0, candidate) <= 20
-               }) {
+            // When at least one response omits xid, coordinates can identify a
+            // duplicate. Different known IDs always remain distinct, and an
+            // ambiguous coordinate match is left alone.
+            let nearbyMatches = result.indices.filter { index in
+                let existingID = normalizedID(result[index].externalID)
+                guard existingID == nil || externalID == nil || existingID == externalID else {
+                    return false
+                }
+                return distanceMeters(result[index], candidate) <= 20
+            }
+            if let existingIndex = nearbyMatches.count == 1 ? nearbyMatches.first : nil {
                 result[existingIndex].preferences.formUnion(candidate.preferences)
+                if normalizedID(result[existingIndex].externalID) == nil, let externalID {
+                    result[existingIndex].externalID = externalID
+                    indexByExternalID[externalID] = existingIndex
+                }
                 continue
             }
 
             let newIndex = result.count
             result.append(candidate)
-            if let externalID, !externalID.isEmpty {
+            if let externalID {
                 indexByExternalID[externalID] = newIndex
             }
         }
 
         return result
+    }
+
+    private static func normalizedID(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
     }
 
     @MainActor
@@ -69,7 +80,8 @@ enum RoutePlanningAlgorithm {
         originLatitude: Double,
         originLongitude: Double,
         metricsProvider: RouteMetricsProviding
-    ) async -> RoutePlanningResult {
+    ) async throws -> RoutePlanningResult {
+        try Task.checkCancellation()
         guard placesPerDay > 0 else {
             return RoutePlanningResult(
                 days: Array(repeating: [], count: dayPreferences.count),
@@ -82,9 +94,11 @@ enum RoutePlanningAlgorithm {
         var didReachRequestLimit = false
 
         for preference in dayPreferences {
+            try Task.checkCancellation()
             var day: [RoutePlaceCandidate] = []
             var current = Coordinate(latitude: originLatitude, longitude: originLongitude)
             while day.count < placesPerDay {
+                try Task.checkCancellation()
                 let eligible = remaining.indices.filter {
                     remaining[$0].preferences.contains(preference)
                 }
@@ -115,11 +129,13 @@ enum RoutePlanningAlgorithm {
                 while batchStart < sortedEligible.count, ranked.isEmpty, !requestBudgetExhausted {
                     let batchEnd = min(batchStart + 4, sortedEligible.count)
                     for index in sortedEligible[batchStart..<batchEnd] {
+                        try Task.checkCancellation()
                         do {
                             let metrics = try await metricsProvider.metrics(
                                 from: current.latitude, longitude: current.longitude,
                                 to: remaining[index], transport: transport
                             )
+                            try Task.checkCancellation()
                             guard metrics.distanceMeters.isFinite,
                                   metrics.expectedTravelTime.isFinite,
                                   metrics.distanceMeters > 0,
@@ -129,7 +145,10 @@ enum RoutePlanningAlgorithm {
                             requestBudgetExhausted = true
                             didReachRequestLimit = true
                             break
+                        } catch is CancellationError {
+                            throw CancellationError()
                         } catch {
+                            try Task.checkCancellation()
                             continue
                         }
                     }
@@ -145,6 +164,7 @@ enum RoutePlanningAlgorithm {
             days.append(day)
         }
 
+        try Task.checkCancellation()
         return RoutePlanningResult(days: days, requestLimitReached: didReachRequestLimit)
     }
 

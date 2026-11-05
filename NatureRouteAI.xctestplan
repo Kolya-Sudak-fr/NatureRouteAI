@@ -1,0 +1,38 @@
+{
+  "configurations" : [
+    {
+      "id" : "148FF70E-7D9E-4B0D-BBD1-AFCBA1E00BE8",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:NatureRouteAI.xcodeproj",
+      "identifier" : "936290462F62D95A00E33040",
+      "name" : "NatureRouteAI"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:NatureRouteAI.xcodeproj",
+        "identifier" : "A10000000000000000000004",
+        "name" : "NatureRouteAITests"
+      }
+    },
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:NatureRouteAI.xcodeproj",
+        "identifier" : "93C2B176309527A600E58400",
+        "name" : "NatureRouteAIUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

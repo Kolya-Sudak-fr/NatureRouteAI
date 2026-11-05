@@ -2,7 +2,18 @@ import Foundation
 import CoreLocation
 
 @MainActor
-class RouteGenerator {
+protocol RouteGenerating {
+    func generateRoute(
+        city: String,
+        days: Int,
+        placesPerDay: Int,
+        preferences: [String],
+        transport: TransportMode
+    ) async throws -> Route
+}
+
+@MainActor
+class RouteGenerator: RouteGenerating {
     
     private let networkService = NetworkService()
     private let metricsProvider: RouteMetricsProviding
@@ -35,9 +46,11 @@ class RouteGenerator {
             throw AppError.invalidRouteRequest
         }
         metricsProvider.beginPlanningSession()
+        try Task.checkCancellation()
         
         // Шаг 1 — получаем реальные координаты города
         let cityCoord = try await networkService.fetchCityCoordinate(city: city)
+        try Task.checkCancellation()
         
         let dayPreferences = (0..<days).map { preferences[$0 % preferences.count] }
         var seenPreferences = Set<String>()
@@ -48,10 +61,11 @@ class RouteGenerator {
         // Search each selected preference once, requesting enough alternatives
         // to distribute unique spots across every day that uses that preference.
         for preference in uniquePreferences {
+            try Task.checkCancellation()
             let requiredForPreference = dayPreferences.filter { $0 == preference }.count * placesPerDay
             let candidateLimit = min(max(requiredForPreference * 2 + 10, requiredForPreference), 200)
             do {
-                candidates += try await networkService.fetchPlaces(
+                let fetchedCandidates = try await networkService.fetchPlaces(
                     lat: cityCoord.lat,
                     lon: cityCoord.lon,
                     kinds: kindsFor(preference: preference),
@@ -59,9 +73,13 @@ class RouteGenerator {
                     count: candidateLimit,
                     radiusMeters: placeSearchRadiusMeters
                 )
+                try Task.checkCancellation()
+                candidates += fetchedCandidates
             } catch AppError.noPlacesFound {
+                try Task.checkCancellation()
                 // Other preferences may still have valid places.
             } catch {
+                try Task.checkCancellation()
                 // Keep usable results from other preference searches. If every
                 // search fails, preserve the API/network error for the caller.
                 if firstSearchError == nil {
@@ -74,7 +92,7 @@ class RouteGenerator {
             throw firstSearchError
         }
 
-        let planningResult = await RoutePlanningAlgorithm.distribute(
+        let planningResult = try await RoutePlanningAlgorithm.distribute(
             candidates: candidates,
             dayPreferences: dayPreferences,
             placesPerDay: placesPerDay,
@@ -83,6 +101,7 @@ class RouteGenerator {
             originLongitude: cityCoord.lon,
             metricsProvider: metricsProvider
         )
+        try Task.checkCancellation()
         let routeDays = planningResult.days.enumerated().map { index, candidates in
             RouteDay(
                 dayNumber: index + 1,

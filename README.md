@@ -1,36 +1,45 @@
-# NatureRoute AI 🌿
+# NatureRouteAI
 
-A native iOS app that builds multi-day nature trips. Pick a city, trip length and the kind of nature you like, and get a day-by-day route of real places (peaks, forests, lakes, waterfalls, national parks) on an interactive map.
+NatureRouteAI is an iOS app for planning multi-day nature trips. Choose a city, trip length, transport mode, and nature preferences to build a route from real OpenTripMap places.
 
-> **Status:** MVP in active development. Route generation is currently data-driven (OpenTripMap). An LLM-powered suggestion layer is planned for a later version.
+## Current MVP
 
-## Screenshots
+- Search for mountains, forests, lakes, waterfalls, and national parks within 50 km of a city.
+- Distribute unique stops across requested days; return a partial route when there are not enough places.
+- Use MapKit travel distance and estimated travel time to rank nearby candidates for walking, cycling, and driving.
+- Show stops and successfully calculated within-day route segments on a MapKit map.
+- Open route directions in Apple Maps or Google Maps. Public transport directions are external; the app does not calculate transit routes or schedules.
+- Save, reopen, and delete routes locally with SwiftData.
+- Show user-facing search, routing, save, and delete states.
 
-| Home | Route planner | Map |
-| :---: | :---: | :---: |
-| ![Home](docs/screenshots/home.png) | ![Planner](docs/screenshots/planner.png) | ![Map](docs/screenshots/map.png) |
+Route generation is data-driven and deterministic. It does not currently use an LLM or claim to find a “perfect” route.
 
-## Features
+## Requirements
 
-- Choose nature preferences: Mountains, Forest, Lakes, Waterfalls, National Parks
-- Set city, number of days and places per day
-- Generate a route from real OpenTripMap data: places within 50 km of the city, one preference per day, cycling through your choices
-- Interactive map with color-coded markers and polylines for each day; the camera fits the whole route
-- Save routes on the device with SwiftData and reopen them later
-- Loading state and user-facing error messages (for example, city not found or network problems)
+- Xcode 26 or later
+- iOS 17.0 or later
+- An OpenTripMap API key for live route generation
 
-## Tech Stack
+## Local API configuration
 
-| Area | Technology |
-| --- | --- |
-| Language | Swift |
-| UI | SwiftUI |
-| Architecture | MVVM (`ObservableObject`, `@Published`, `@MainActor`) |
-| Concurrency | async/await, `Task` |
-| Networking | `URLSession`, `Decodable` / `JSONDecoder` |
-| Maps | MapKit, CoreLocation (coordinates) |
-| Persistence | SwiftData |
-| Data source | [OpenTripMap API](https://opentripmap.io/product) |
+The API key is read from `NatureRouteAI/Services/Secrets.swift`. This file is intentionally ignored by Git. For a new checkout:
+
+1. Copy `NatureRouteAI/Services/Secrets.swift.example` to `NatureRouteAI/Services/Secrets.swift`.
+2. Replace the placeholder with your OpenTripMap key.
+3. Keep `Secrets.swift` out of commits.
+
+An API key embedded in an iOS app can be extracted from the installed binary. A backend proxy with server-side key storage and request limits is required before treating the key as confidential in a public release.
+
+## Build and test
+
+Open `NatureRouteAI.xcodeproj`, select the `NatureRouteAI` scheme, and run on an iOS 17+ simulator or device. The `NatureRouteAITests` scheme action contains unit tests for route planning, persistence, and planner state.
+
+```sh
+xcodebuild -project NatureRouteAI.xcodeproj \
+  -scheme NatureRouteAI \
+  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  test
+```
 
 ## Architecture
 
@@ -39,40 +48,38 @@ flowchart LR
     V[RoutePlannerView] --> VM[RoutePlannerViewModel]
     VM --> RG[RouteGenerator]
     RG --> NS[NetworkService]
-    NS --> API[(OpenTripMap API)]
-    VM -- Route --> M[MapView]
+    NS --> API[(OpenTripMap)]
+    RG --> RM[RouteMetricsService]
+    RM --> MK[MapKit Directions]
+    VM --> SD[SwiftData]
+    SD --> SR[SavedRoutesView]
+    V --> M[MapView]
 ```
 
-- **View** shows state and sends user actions. It contains no business logic.
-- **ViewModel** holds screen state, validates input (`canGenerate`) and runs the async work in a `Task`. `@MainActor` guarantees UI state is updated on the main thread.
-- **RouteGenerator** turns preferences into OpenTripMap categories and assembles a `Route` from days and places.
-- **NetworkService** talks to the API: it resolves a city to coordinates, then fetches places around them.
+- **SwiftUI views** render state and handle user actions.
+- **`RoutePlannerViewModel`** owns planner state and async generation, save, and cancellation actions.
+- **`RouteGenerator`** searches candidates and distributes them across days.
+- **`NetworkService`** resolves city coordinates and downloads OpenTripMap places.
+- **`RouteMetricsService`** obtains real walking, cycling, and driving metrics from MapKit; public transit remains external.
+- **SwiftData models** persist routes, days, and places on-device.
 
-## Project Structure
+## Project structure
 
-```
+```text
 NatureRouteAI/
-├── Models/        Place, Route, RouteDay, NaturePreference
-├── Services/      NetworkService, RouteGenerator
+├── Models/
+├── Services/
+├── Design/
 ├── Features/
-│   ├── Home/          HomeView, HomeButton
-│   ├── RoutePlanner/  RoutePlannerView, RoutePlannerViewModel
-│   └── Map/           MapView
-└── NatureRouteAIApp.swift
+│   ├── Home/
+│   ├── RoutePlanner/
+│   ├── Saved Routes/
+│   └── Map/
+└── Assets.xcassets/
 ```
 
-## Roadmap
-
-- [ ] Real road routing with `MKDirections` instead of straight lines between points
-- [ ] Transport modes: walking, cycling, car, transit
-- [ ] `DirectionsService` and a loading state while routes are calculated
-- [ ] Unit tests (XCTest) with a mocked network layer via dependency injection
-- [ ] LLM-powered route suggestions
-- [ ] Backend and user-generated places
+The app currently uses a dark appearance. Housing, food, facilities, taxi integrations, internal transit planning, and monetization are future product work.
 
 ## About
 
-Built by Mykola Sudak, an iOS developer based in the Netherlands. This project is part of my path from factory worker to iOS developer.
-
-
-
+Built by Mykola Sudak, an iOS developer based in the Netherlands.

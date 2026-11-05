@@ -26,7 +26,7 @@ struct RouteNavigationButton: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("The first day's route will open in \(route.transportMode.displayName.lowercased()) mode.")
+            Text("Stops from the first planned day will open in \(route.transportMode.displayName.lowercased()) mode.")
         }
         .alert("Couldn't Open Navigation", isPresented: Binding(
             get: { navigationError != nil },

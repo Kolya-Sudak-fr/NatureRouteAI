@@ -3,7 +3,20 @@ import CoreLocation
 
 class NetworkService {
     
-    private let apiKey = Secrets.openTripMapKey
+    private let apiKey: String
+    private let session: URLSession
+
+    init(apiKey: String = Secrets.openTripMapKey, session: URLSession? = nil) {
+        self.apiKey = apiKey
+        if let session {
+            self.session = session
+        } else {
+            let configuration = URLSessionConfiguration.default
+            configuration.timeoutIntervalForRequest = 30
+            configuration.timeoutIntervalForResource = 60
+            self.session = URLSession(configuration: configuration)
+        }
+    }
     
     func fetchCityCoordinate(city: String) async throws -> (lat: Double, lon: Double) {
         
@@ -17,7 +30,7 @@ class NetworkService {
             throw AppError.unknown
         }
         
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         
         if let httpResponse = response as? HTTPURLResponse {
             guard (200..<300).contains(httpResponse.statusCode) else {
@@ -65,7 +78,7 @@ class NetworkService {
             throw AppError.unknown
         }
         
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         
         if let httpResponse = response as? HTTPURLResponse {
             guard (200..<300).contains(httpResponse.statusCode) else {

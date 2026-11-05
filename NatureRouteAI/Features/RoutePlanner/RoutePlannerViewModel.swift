@@ -20,6 +20,7 @@ class RoutePlannerViewModel: ObservableObject {
     @Published var transport: TransportMode = .walking
     @Published var route: Route?
     @Published var isLoading: Bool = false
+    @Published private(set) var isCancelling = false
     @Published var errorMessage: String?
 
     // View спрашивает ViewModel — можно ли нажать кнопку
@@ -33,14 +34,30 @@ class RoutePlannerViewModel: ObservableObject {
         preferences.filter { $0.isSelected }
     }
 
-    private let generator = RouteGenerator()
+    private let generator: RouteGenerating
+    private var generationTask: Task<Void, Never>?
+    private var generationID = UUID()
 
-    init(initialCity: String = "", initialPreference: String? = nil) {
+    init(initialCity: String = "", initialPreference: String? = nil, generator: RouteGenerating? = nil) {
+        if let generator {
+            self.generator = generator
+        } else {
+            self.generator = RouteGenerator()
+        }
         city = initialCity
         if let initialPreference,
            let index = preferences.firstIndex(where: { $0.title == initialPreference }) {
-            preferences[index].isSelected = true
+            var updatedPreferences = preferences
+            updatedPreferences[index].isSelected = true
+            preferences = updatedPreferences
         }
+    }
+
+    func setPreferenceSelection(at index: Int, isSelected: Bool) {
+        guard preferences.indices.contains(index) else { return }
+        var updatedPreferences = preferences
+        updatedPreferences[index].isSelected = isSelected
+        preferences = updatedPreferences
     }
 
     func isSaved(in context: ModelContext) -> Bool {
@@ -54,7 +71,10 @@ class RoutePlannerViewModel: ObservableObject {
 
     // Вся логика генерации теперь здесь, не в View
     func generateRoute() {
-        guard !isLoading else { return }
+        guard !isLoading || isCancelling else { return }
+        generationTask?.cancel()
+        let currentGenerationID = UUID()
+        generationID = currentGenerationID
         let requestedCity = city.trimmingCharacters(in: .whitespacesAndNewlines)
         let requestedDays = tripDays
         let requestedPlacesPerDay = placesPerDay
@@ -62,10 +82,18 @@ class RoutePlannerViewModel: ObservableObject {
         let requestedTransport = transport
 
         isLoading = true
+        isCancelling = false
         errorMessage = nil
         route = nil
 
-        Task {
+        generationTask = Task {
+            defer {
+                if generationID == currentGenerationID {
+                    isLoading = false
+                    isCancelling = false
+                    generationTask = nil
+                }
+            }
             do {
                 let generatedRoute = try await generator.generateRoute(
                     city: requestedCity,
@@ -74,21 +102,38 @@ class RoutePlannerViewModel: ObservableObject {
                     preferences: requestedPreferences,
                     transport: requestedTransport
                 )
+                try Task.checkCancellation()
+                guard generationID == currentGenerationID else { return }
                 route = generatedRoute
                 let requestedCount = requestedDays * requestedPlacesPerDay
                 let availableCount = generatedRoute.days.reduce(0) { $0 + $1.places.count }
                 if availableCount < requestedCount {
-                    errorMessage = "Only \(availableCount) unique, routeable nature spots could be planned for the \(requestedCount) requested places. This partial route keeps every stop unique."
+                    errorMessage = "Only \(availableCount) unique nature spots could be added to the requested \(requestedCount)-stop plan. This partial route keeps every stop unique."
                 }
             } catch let appError as AppError {
+                guard generationID == currentGenerationID else { return }
                 errorMessage = appError.userMessage
+            } catch is CancellationError {
+                guard generationID == currentGenerationID else { return }
+                errorMessage = nil
+            } catch let urlError as URLError where urlError.code == .cancelled {
+                guard generationID == currentGenerationID else { return }
+                errorMessage = nil
             } catch let urlError as URLError where Self.isConnectionError(urlError) {
+                guard generationID == currentGenerationID else { return }
                 errorMessage = AppError.noInternetConnection.userMessage
             } catch {
+                guard generationID == currentGenerationID else { return }
                 errorMessage = AppError.unknown.userMessage
             }
-            isLoading = false
         }
+    }
+
+    func cancelGeneration() {
+        guard isLoading, !isCancelling else { return }
+        isCancelling = true
+        errorMessage = nil
+        generationTask?.cancel()
     }
 
     func saveRoute(context: ModelContext) {
