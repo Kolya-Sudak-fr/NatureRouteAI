@@ -33,6 +33,17 @@ import SwiftData
         places.sorted { $0.position < $1.position }
     }
 
+    /// Nil when no stop has MapKit metrics, such as on public transport routes.
+    var totalDistanceMeters: Double? {
+        let legs = places.compactMap(\.legDistanceMeters)
+        return legs.isEmpty ? nil : legs.reduce(0, +)
+    }
+
+    var totalTravelTime: TimeInterval? {
+        let legs = places.compactMap(\.legTravelTime)
+        return legs.isEmpty ? nil : legs.reduce(0, +)
+    }
+
     init(dayNumber: Int, places: [Place]) {
         for (index, place) in places.enumerated() {
             place.position = index
@@ -51,6 +62,10 @@ import SwiftData
     var longitude: Double
     /// Default value lets routes saved before this field existed migrate.
     var position: Int = 0
+    /// MapKit's distance and time from the previous stop, or from the city centre
+    /// for a day's first stop. Nil for public transport and older saved routes.
+    var legDistanceMeters: Double?
+    var legTravelTime: TimeInterval?
     @Transient var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }

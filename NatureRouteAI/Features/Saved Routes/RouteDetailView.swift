@@ -113,53 +113,7 @@ struct RouteDetailView: View {
 
                     // Days List (sorted by day number)
                     ForEach(orderedDays) { day in
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Day \(day.dayNumber)")
-                                    .font(.headline)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                Spacer()
-                                Image(systemName: "calendar")
-                                    .font(.subheadline)
-                                    .foregroundColor(green)
-                            }
-
-                            if day.places.isEmpty {
-                                Text("No places planned for this day.")
-                                    .font(.subheadline)
-                                    .foregroundColor(.gray)
-                            } else {
-                                ForEach(Array(day.orderedPlaces.enumerated()), id: \.element.id) { index, place in
-                                    HStack(spacing: 10) {
-                                        Text("\(index + 1)")
-                                            .font(.caption)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.black)
-                                            .frame(width: 22, height: 22)
-                                            .background(Circle().fill(green))
-                                        Text(place.name)
-                                            .font(.subheadline)
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        Text(place.type)
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
-                                        Button {
-                                            prepareNavigation(to: [place])
-                                        } label: {
-                                            Image(systemName: "arrow.turn.up.right")
-                                                .foregroundColor(green)
-                                                .padding(.leading, 6)
-                                        }
-                                        .accessibilityLabel("Navigate to \(place.name)")
-                                    }
-                                }
-                            }
-                        }
-                        .padding(16)
-                        .background(cardBg)
-                        .cornerRadius(16)
+                        RouteDayCard(day: day) { prepareNavigation(to: [$0]) }
                     }
                 }
                 .padding(20)

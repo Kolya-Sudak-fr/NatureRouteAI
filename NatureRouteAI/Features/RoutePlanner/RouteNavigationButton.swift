@@ -12,7 +12,7 @@ struct RouteNavigationButton: View {
 
     var body: some View {
         Button(action: prepareRoute) {
-            Label("Start Navigation", systemImage: "location.north.line.fill")
+            Label("Navigate", systemImage: "location.north.line.fill")
                 .font(.headline)
                 .fontWeight(.bold)
                 .foregroundColor(.black)

@@ -5,6 +5,7 @@ import MapKit
 struct RoutePlannerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var viewModel = RoutePlannerViewModel()
     @State private var showMapPreview = false
     @FocusState private var cityFocused: Bool
@@ -16,6 +17,8 @@ struct RoutePlannerView: View {
         ))
     }
 
+    private let topAnchor = "planner-top"
+
     // Единая палитра приложения
     private let darkBg = Color(red: 0.08, green: 0.10, blue: 0.08)
     private let cardBg = Color(red: 0.15, green: 0.18, blue: 0.15)
@@ -23,6 +26,7 @@ struct RoutePlannerView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { scrollProxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // Header
@@ -41,6 +45,38 @@ struct RoutePlannerView: View {
                             .foregroundColor(.gray)
                     }
                     .padding(.top, 8)
+
+                    // Error
+                    if let error = viewModel.errorMessage {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.white)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.orange.opacity(0.12))
+                        .cornerRadius(12)
+                        .transition(.opacity)
+                    }
+                    // Result
+                    if let route = viewModel.route {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Your route in \(route.city ?? "this area")")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            ForEach(route.days.sorted { $0.dayNumber < $1.dayNumber }) { day in
+                                RouteDayCard(day: day)
+                            }
+                        }
+                        .transition(.opacity)
+
+                        if dynamicTypeSize.isAccessibilitySize {
+                            actionButtons
+                        }
+                    }
 
                     // Destination card
                     VStack(spacing: 12) {
@@ -123,34 +159,36 @@ struct RoutePlannerView: View {
                     .background(cardBg)
                     .cornerRadius(18)
 
-                    // Error
-                    if let error = viewModel.errorMessage {
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.orange)
-                            Text(error)
-                                .font(.caption)
-                                .foregroundColor(.white)
-                        }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.orange.opacity(0.12))
-                        .cornerRadius(12)
-                        .transition(.opacity)
+                    if dynamicTypeSize.isAccessibilitySize, viewModel.route == nil {
+                        actionButtons
                     }
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 32)
+                .id(topAnchor)
             }
+            .onChange(of: viewModel.route?.id) { scrollToTop(scrollProxy) }
+            .onChange(of: viewModel.errorMessage) { scrollToTop(scrollProxy) }
             .background(darkBg.ignoresSafeArea())
             .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom) { bottomButtons }
+            .safeAreaInset(edge: .bottom) {
+                // At accessibility text sizes a pinned panel would cover most of
+                // the screen, so the buttons scroll with the content instead.
+                if !dynamicTypeSize.isAccessibilitySize {
+                    actionButtons
+                        .padding(.horizontal, 20)
+                        .padding(.top, 10)
+                        .padding(.bottom, 10)
+                        .background(darkBg.ignoresSafeArea())
+                }
+            }
             .animation(RouteMotion.animation(RouteMotion.reveal, reduceMotion: reduceMotion), value: viewModel.route?.id)
             .animation(RouteMotion.animation(RouteMotion.quick, reduceMotion: reduceMotion), value: viewModel.errorMessage)
             .navigationTitle("New Route")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(darkBg, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            }
         }
         .sheet(isPresented: $showMapPreview) {
             if let route = viewModel.route {
@@ -177,6 +215,13 @@ struct RoutePlannerView: View {
         }
     }
 
+    /// The result and any error appear at the top, which may be scrolled out of view.
+    private func scrollToTop(_ proxy: ScrollViewProxy) {
+        withAnimation(RouteMotion.animation(RouteMotion.reveal, reduceMotion: reduceMotion)) {
+            proxy.scrollTo(topAnchor, anchor: .top)
+        }
+    }
+
     // Поиск природных точек не меняется от выбранного транспорта.
     private var transportHint: String {
         if viewModel.transport == .publicTransport {
@@ -185,51 +230,76 @@ struct RoutePlannerView: View {
         return "Nature spots are searched within 50 km. Apple Maps travel distance and time help choose the stop order."
     }
 
-    // MARK: - Bottom action buttons
+    /// Side by side normally, stacked at accessibility text sizes where two
+    /// labels no longer fit in one row.
+    private var actionRowLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 10))
+    }
+
+    // MARK: - Action buttons
     @ViewBuilder
-    private var bottomButtons: some View {
+    private var actionButtons: some View {
         VStack(spacing: 10) {
             if let route = viewModel.route {
-                RouteNavigationButton(route: route)
+                actionRowLayout {
+                    RouteNavigationButton(route: route)
 
-                Button {
-                    showMapPreview = true
-                } label: {
-                    Label("View on Map", systemImage: "map.fill")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(cardBg)
-                        .cornerRadius(14)
-                }
-
-                if viewModel.isSaved(in: modelContext) {
-                    Label("Route saved — find it in Saved Routes", systemImage: "checkmark.circle.fill")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(green)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(green.opacity(0.15))
-                        .cornerRadius(14)
-                        .transition(RouteMotion.transition(reduceMotion: reduceMotion))
-                } else {
                     Button {
-                        withAnimation(RouteMotion.animation(RouteMotion.selection, reduceMotion: reduceMotion)) {
-                            viewModel.saveRoute(context: modelContext)
-                        }
+                        showMapPreview = true
                     } label: {
-                            Label("Save Route", systemImage: "bookmark")
+                        Label("Map", systemImage: "map.fill")
                             .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.black)
+                            .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(green)
+                            .background(cardBg)
                             .cornerRadius(14)
                     }
-                    .transition(.opacity)
+                }
+
+                actionRowLayout {
+                    if viewModel.isSaved(in: modelContext) {
+                        Label("Saved", systemImage: "checkmark.circle.fill")
+                            .font(.headline)
+                            .foregroundColor(green)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(green.opacity(0.15))
+                            .cornerRadius(14)
+                            .accessibilityLabel("Route saved. Find it in Saved Routes.")
+                            .transition(RouteMotion.transition(reduceMotion: reduceMotion))
+                    } else {
+                        Button {
+                            withAnimation(RouteMotion.animation(RouteMotion.selection, reduceMotion: reduceMotion)) {
+                                viewModel.saveRoute(context: modelContext)
+                            }
+                        } label: {
+                            Label("Save Route", systemImage: "bookmark")
+                                .font(.headline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.black)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(green)
+                                .cornerRadius(14)
+                        }
+                        .transition(.opacity)
+                    }
+
+                    Button {
+                        viewModel.generateRoute()
+                    } label: {
+                        Label("New Route", systemImage: "sparkles")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(cardBg)
+                            .cornerRadius(14)
+                    }
+                    .disabled(!viewModel.canGenerate)
                 }
             }
 
@@ -252,7 +322,7 @@ struct RoutePlannerView: View {
                 .background(green)
                 .cornerRadius(14)
                 .transition(.opacity)
-            } else {
+            } else if viewModel.route == nil {
                 Button {
                     viewModel.generateRoute()
                 } label: {
@@ -270,10 +340,6 @@ struct RoutePlannerView: View {
             }
         }
         .animation(RouteMotion.animation(RouteMotion.quick, reduceMotion: reduceMotion), value: viewModel.isLoading)
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
-        .background(darkBg.opacity(0.97).ignoresSafeArea())
     }
 }
 

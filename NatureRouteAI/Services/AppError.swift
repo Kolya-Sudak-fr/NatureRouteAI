@@ -28,6 +28,8 @@ enum AppError: Error {
             return "Choose at least one nature preference and a valid trip length before generating a route."
         case .noInternetConnection:
             return "No internet connection. Check your connection and try again."
+        case .serverError(429):
+            return "The nature places service is busy. Wait a moment and try again."
         case .serverError(let code):
             return "Service error (\(code)). Please try again later."
         case .unknown:

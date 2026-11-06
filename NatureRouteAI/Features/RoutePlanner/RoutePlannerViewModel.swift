@@ -179,6 +179,8 @@ class RoutePlannerViewModel: ObservableObject {
                     longitude: place.longitude
                 )
                 copy.id = place.id
+                copy.legDistanceMeters = place.legDistanceMeters
+                copy.legTravelTime = place.legTravelTime
                 return copy
             }
             let copy = RouteDay(dayNumber: day.dayNumber, places: copiedPlaces)

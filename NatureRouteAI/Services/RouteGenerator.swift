@@ -16,10 +16,16 @@ protocol RouteGenerating {
 class RouteGenerator: RouteGenerating {
     
     private let networkService: NetworkService
+    private let cityGeocoder: CityGeocoding
     private let metricsProvider: RouteMetricsProviding
     private let placeSearchRadiusMeters = 50_000
 
-    init(metricsProvider: RouteMetricsProviding? = nil, networkService: NetworkService? = nil) {
+    init(
+        metricsProvider: RouteMetricsProviding? = nil,
+        networkService: NetworkService? = nil,
+        cityGeocoder: CityGeocoding? = nil
+    ) {
+        self.cityGeocoder = cityGeocoder ?? MapKitCityGeocoder()
         self.networkService = networkService ?? NetworkService()
         self.metricsProvider = metricsProvider ?? MapKitRouteMetricsService()
     }
@@ -50,7 +56,7 @@ class RouteGenerator: RouteGenerating {
         try Task.checkCancellation()
         
         // Шаг 1 — получаем реальные координаты города
-        let cityCoord = try await networkService.fetchCityCoordinate(city: city)
+        let resolvedCity = try await cityGeocoder.resolveCity(named: city)
         try Task.checkCancellation()
         
         let dayPreferences = (0..<days).map { preferences[$0 % preferences.count] }
@@ -67,8 +73,8 @@ class RouteGenerator: RouteGenerating {
             let candidateLimit = min(max(requiredForPreference * 2 + 10, requiredForPreference), 200)
             do {
                 let fetchedCandidates = try await networkService.fetchPlaces(
-                    lat: cityCoord.lat,
-                    lon: cityCoord.lon,
+                    lat: resolvedCity.latitude,
+                    lon: resolvedCity.longitude,
                     kinds: kindsFor(preference: preference),
                     preference: preference,
                     count: candidateLimit,
@@ -98,8 +104,8 @@ class RouteGenerator: RouteGenerating {
             dayPreferences: dayPreferences,
             placesPerDay: placesPerDay,
             transport: transport,
-            originLatitude: cityCoord.lat,
-            originLongitude: cityCoord.lon,
+            originLatitude: resolvedCity.latitude,
+            originLongitude: resolvedCity.longitude,
             metricsProvider: metricsProvider
         )
         try Task.checkCancellation()
@@ -108,17 +114,26 @@ class RouteGenerator: RouteGenerating {
            planningResult.days.flatMap({ $0 }).count < days * placesPerDay {
             throw AppError.routeServiceUnavailable
         }
-        let routeDays = planningResult.days.enumerated().map { index, candidates in
+        // With too few places, the last days stay empty. Saying "3 days" for a
+        // two-day route would be wrong, so they are dropped.
+        var plannedDays = planningResult.days
+        while plannedDays.last?.isEmpty == true {
+            plannedDays.removeLast()
+        }
+        let routeDays = plannedDays.enumerated().map { index, candidates in
             RouteDay(
                 dayNumber: index + 1,
-                places: candidates.map {
-                    Place(
-                        name: $0.name,
-                        type: $0.type,
-                        city: city,
-                        latitude: $0.latitude,
-                        longitude: $0.longitude
+                places: candidates.map { candidate in
+                    let place = Place(
+                        name: candidate.name,
+                        type: candidate.type,
+                        city: resolvedCity.name,
+                        latitude: candidate.latitude,
+                        longitude: candidate.longitude
                     )
+                    place.legDistanceMeters = candidate.legMetrics?.distanceMeters
+                    place.legTravelTime = candidate.legMetrics?.expectedTravelTime
+                    return place
                 }
             )
         }
@@ -136,6 +151,6 @@ class RouteGenerator: RouteGenerating {
             throw AppError.noPlacesFound
         }
 
-        return Route(city: city, days: routeDays, transport: transport)
+        return Route(city: resolvedCity.name, days: routeDays, transport: transport)
     }
 }

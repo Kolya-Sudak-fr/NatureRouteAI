@@ -7,7 +7,7 @@ NatureRouteAI is an iOS app for planning multi-day nature trips. Choose a city, 
 - Search for mountains, forests, lakes, waterfalls, and national parks within 50 km of a city.
 - Distribute unique stops across requested days; return a partial route when there are not enough places.
 - Use MapKit travel distance and estimated travel time to rank nearby candidates for walking, cycling, and driving.
-- Show stops and successfully calculated within-day route segments on a MapKit map.
+- Show each day's stops with MapKit travel distance and time, and draw successfully calculated within-day route segments on a map.
 - Open route directions in Apple Maps or Google Maps. Public transport directions are external; the app does not calculate transit routes or schedules.
 - Save, reopen, and delete routes locally with SwiftData.
 - Show user-facing search, routing, save, and delete states.
@@ -47,6 +47,8 @@ xcodebuild -project NatureRouteAI.xcodeproj \
 flowchart LR
     V[RoutePlannerView] --> VM[RoutePlannerViewModel]
     VM --> RG[RouteGenerator]
+    RG --> CG[CityGeocoder]
+    CG --> MK
     RG --> NS[NetworkService]
     NS --> API[(OpenTripMap)]
     RG --> RM[RouteMetricsService]
@@ -59,7 +61,8 @@ flowchart LR
 - **SwiftUI views** render state and handle user actions.
 - **`RoutePlannerViewModel`** owns planner state and async generation, save, and cancellation actions.
 - **`RouteGenerator`** searches candidates and distributes them across days.
-- **`NetworkService`** resolves city coordinates and downloads OpenTripMap places.
+- **`CityGeocoder`** resolves the entered city with Apple's `MKLocalSearch`.
+- **`NetworkService`** downloads OpenTripMap places.
 - **`RouteMetricsService`** obtains real walking, cycling, and driving metrics from MapKit; public transit remains external.
 - **SwiftData models** persist routes, days, and places on-device.
 

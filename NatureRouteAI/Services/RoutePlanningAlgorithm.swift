@@ -10,7 +10,9 @@ struct RoutePlaceCandidate: Equatable {
     let longitude: Double
     var preferences: Set<String>
     let quality: Int?
-    let sourceOrder: Int
+    var sourceOrder: Int
+    /// MapKit's metrics from the previous stop, set once the place joins a day.
+    var legMetrics: RouteMetrics? = nil
 }
 
 struct RoutePlanningResult {
@@ -26,6 +28,8 @@ enum RoutePlanningAlgorithm {
     /// below that leaves room for the map to draw the finished route.
     nonisolated static let defaultRequestBudget = 40
     private static let maxCandidatesPerStop = 4
+    private static let sameNameDistanceMeters = 2_000.0
+    private static let containedNameDistanceMeters = 150.0
     /// While throttling, MapKit also reports generic failures instead of
     /// `loadingThrottled`. A long unbroken run of them means it stopped answering.
     private static let maxConsecutiveServiceFailures = 8
@@ -44,6 +48,15 @@ enum RoutePlanningAlgorithm {
             if let externalID,
                let existingIndex = indexByExternalID[externalID] {
                 result[existingIndex].preferences.formUnion(candidate.preferences)
+                continue
+            }
+
+            // OpenTripMap often lists one place twice under different xids.
+            if let existingIndex = result.indices.first(where: { isSamePlaceByName(result[$0], candidate) }) {
+                result[existingIndex].preferences.formUnion(candidate.preferences)
+                if let externalID {
+                    indexByExternalID[externalID] = existingIndex
+                }
                 continue
             }
 
@@ -74,6 +87,24 @@ enum RoutePlanningAlgorithm {
         }
 
         return result
+    }
+
+    private static func isSamePlaceByName(_ first: RoutePlaceCandidate, _ second: RoutePlaceCandidate) -> Bool {
+        let firstName = normalizedName(first.name)
+        let secondName = normalizedName(second.name)
+        guard !firstName.isEmpty, !secondName.isEmpty else { return false }
+
+        let distance = distanceMeters(first, second)
+        if firstName == secondName { return distance <= sameNameDistanceMeters }
+        // "Ekeberg" and "Ekeberg naturreservat" at the same spot, but not
+        // "Blue Lake" and "Blue Lake View" a kilometre apart.
+        return distance <= containedNameDistanceMeters
+            && (firstName.contains(secondName) || secondName.contains(firstName))
+    }
+
+    private static func normalizedName(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }
 
     private static func normalizedID(_ value: String?) -> String? {
@@ -115,9 +146,12 @@ enum RoutePlanningAlgorithm {
             var current = Coordinate(latitude: originLatitude, longitude: originLongitude)
             while day.count < placesPerDay, !routingInterrupted {
                 try Task.checkCancellation()
-                let eligible = remaining.indices.filter {
+                // A preference can run out of places. Prefer another selected
+                // category over leaving the day empty.
+                let matching = remaining.indices.filter {
                     remaining[$0].preferences.contains(preference)
                 }
+                let eligible = matching.isEmpty ? Array(remaining.indices) : matching
                 guard !eligible.isEmpty else { break }
 
                 let sortedEligible = eligible.sorted {
@@ -195,7 +229,8 @@ enum RoutePlanningAlgorithm {
                     batchStart = batchEnd
                 }
                 guard let best = ranked.min(by: { $0.score < $1.score }) else { break }
-                let next = remaining.remove(at: best.index)
+                var next = remaining.remove(at: best.index)
+                next.legMetrics = best.metrics
                 current = Coordinate(latitude: next.latitude, longitude: next.longitude)
                 day.append(next)
             }

@@ -356,7 +356,7 @@ enum SavedRouteCardPresentation {
         return palettes[seed % palettes.count]
     }
 
-    private static func readableCategory(_ type: String) -> String {
+    static func readableCategory(_ type: String) -> String {
         switch type {
         case "mountain_peaks": "Mountains"
         case "nature_reserves", "natural": "Nature"

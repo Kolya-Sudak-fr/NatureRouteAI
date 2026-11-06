@@ -176,8 +176,9 @@ final class RouteMetricsFailureTests: XCTestCase {
     private func makeGenerator(_ provider: ScriptedMetricsProvider) -> RouteGenerator {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubOpenTripMapProtocol.self]
+        StubOpenTripMapProtocol.respond = { _ in (200, StubOpenTripMapProtocol.places(count: 20)) }
         let network = NetworkService(apiKey: "test", session: URLSession(configuration: configuration))
-        return RouteGenerator(metricsProvider: provider, networkService: network)
+        return RouteGenerator(metricsProvider: provider, networkService: network, cityGeocoder: StubCityGeocoder())
     }
 
     private func assertGeneration(
@@ -222,24 +223,5 @@ private final class ScriptedMetricsProvider: RouteMetricsProviding {
         if let failure, requestCount > afterRequests { throw failure }
         if let failingEvery, requestCount % failingEvery == 0 { throw RouteMetricsError.serviceUnavailable }
         return RouteMetrics(distanceMeters: 1_000, expectedTravelTime: 600)
-    }
-}
-
-private final class StubOpenTripMapProtocol: URLProtocol {
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-    override func stopLoading() {}
-
-    override func startLoading() {
-        let features = (0..<20).map { index in
-            #"{"geometry":{"coordinates":[\#(5 + Double(index) * 0.01),52]},"properties":{"name":"Spot \#(index)","xid":"x\#(index)","rate":3}}"#
-        }
-        let body = request.url?.path.hasSuffix("geoname") == true
-            ? #"{"lat":52,"lon":5,"status":"OK"}"#
-            : #"{"features":[\#(features.joined(separator: ","))]}"#
-        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(body.utf8))
-        client?.urlProtocolDidFinishLoading(self)
     }
 }
