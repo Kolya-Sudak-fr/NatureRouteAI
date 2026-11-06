@@ -200,6 +200,54 @@ final class RoutePlannerStateTests: XCTestCase {
         XCTAssertFalse(viewModel.errorMessage?.localizedCaseInsensitiveContains("routeable") == true)
     }
 
+    func testServiceErrorArrivingAfterCancelIsNotShown() async throws {
+        let viewModel = makeReadyViewModel(generator: LateFailureRouteGenerator())
+
+        viewModel.generateRoute()
+        try await Task.sleep(for: .milliseconds(20))
+        viewModel.cancelGeneration()
+        await waitForCompletion(viewModel)
+
+        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
+    func testPlannedStopOrderSurvivesSavingAndReopening() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Order.store")
+        let schema = Schema([Route.self, RouteDay.self, Place.self])
+        func openContainer() throws -> ModelContainer {
+            try ModelContainer(
+                for: schema,
+                configurations: [ModelConfiguration(schema: schema, url: storeURL, allowsSave: true)]
+            )
+        }
+
+        let expected = (1...3).map { day in (1...8).map { "Day \(day) stop \($0)" } }
+        let days = expected.enumerated().map { index, names in
+            RouteDay(dayNumber: index + 1, places: names.map {
+                Place(name: $0, type: "water", latitude: 52, longitude: 5)
+            })
+        }
+        let viewModel = RoutePlannerViewModel(initialCity: "Order", generator: StubRouteGenerator(result: .waitForCancellation))
+        viewModel.route = Route(city: "Order", days: days)
+        viewModel.saveRoute(context: ModelContext(try openContainer()))
+        XCTAssertNil(viewModel.errorMessage)
+
+        let reopened = try XCTUnwrap(ModelContext(try openContainer()).fetch(FetchDescriptor<Route>()).first)
+        for day in reopened.days {
+            XCTAssertEqual(day.orderedPlaces.map(\.name), expected[day.dayNumber - 1])
+        }
+    }
+
+    func testLargestPlanInTheFormFitsTheRequestBudget() {
+        let stops = RoutePlannerViewModel.tripDaysRange.upperBound * RoutePlannerViewModel.placesPerDayRange.upperBound
+        XCTAssertLessThanOrEqual(stops, RoutePlanningAlgorithm.defaultRequestBudget)
+    }
+
     private func makeReadyViewModel(generator: RouteGenerating) -> RoutePlannerViewModel {
         let viewModel = RoutePlannerViewModel(initialCity: "Amsterdam", generator: generator)
         viewModel.setPreferenceSelection(at: 0, isSelected: true)
@@ -225,6 +273,21 @@ final class RoutePlannerStateTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(1))
         }
         XCTAssertEqual(generator.callCount, count)
+    }
+}
+
+@MainActor
+private final class LateFailureRouteGenerator: RouteGenerating {
+    func generateRoute(
+        city: String,
+        days: Int,
+        placesPerDay: Int,
+        preferences: [String],
+        transport: TransportMode
+    ) async throws -> Route {
+        // The server already answered, so the answer arrives despite the cancel.
+        try? await Task.sleep(for: .milliseconds(100))
+        throw AppError.serverError(500)
     }
 }
 

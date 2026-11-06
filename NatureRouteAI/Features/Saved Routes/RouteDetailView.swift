@@ -26,7 +26,7 @@ struct RouteDetailView: View {
     }
 
     private var orderedPlaces: [Place] {
-        orderedDays.flatMap(\.places)
+        orderedDays.flatMap(\.orderedPlaces)
     }
 
     var body: some View {
@@ -130,7 +130,7 @@ struct RouteDetailView: View {
                                     .font(.subheadline)
                                     .foregroundColor(.gray)
                             } else {
-                                ForEach(Array(day.places.enumerated()), id: \.element.id) { index, place in
+                                ForEach(Array(day.orderedPlaces.enumerated()), id: \.element.id) { index, place in
                                     HStack(spacing: 10) {
                                         Text("\(index + 1)")
                                             .font(.caption)
@@ -225,11 +225,11 @@ struct RouteDetailView: View {
     private func startCurrentDayRoute() {
         guard let currentPlace = orderedPlaces[safe: nextStopIndex],
               let day = orderedDays.first(where: { $0.places.contains(where: { $0.id == currentPlace.id }) }),
-              let startIndex = day.places.firstIndex(where: { $0.id == currentPlace.id }) else {
+              let startIndex = day.orderedPlaces.firstIndex(where: { $0.id == currentPlace.id }) else {
             navigationError = NavigationLinkError.noStops.localizedDescription
             return
         }
-        prepareNavigation(to: Array(day.places.dropFirst(startIndex)))
+        prepareNavigation(to: Array(day.orderedPlaces.dropFirst(startIndex)))
     }
 
     private func prepareNavigation(to places: [Place]) {

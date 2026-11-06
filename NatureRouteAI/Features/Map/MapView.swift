@@ -177,10 +177,11 @@ struct MapView: View {
             var result: [DayRoadLines] = []
             var attempted = 0
             var failed = 0
+            var wasThrottled = false
 
             for (dayIndex, day) in requestedDays.enumerated() {
                 guard !Task.isCancelled else { return }
-                let places = day.places
+                let places = day.orderedPlaces
                 guard places.count > 1 else {
                     result.append(DayRoadLines(dayIndex: dayIndex, lines: []))
                     continue
@@ -192,7 +193,8 @@ struct MapView: View {
                     let sourceCoordinate = places[i].coordinate
                     let destinationCoordinate = places[i + 1].coordinate
                     attempted += 1
-                    guard CLLocationCoordinate2DIsValid(sourceCoordinate),
+                    guard !wasThrottled,
+                          CLLocationCoordinate2DIsValid(sourceCoordinate),
                           CLLocationCoordinate2DIsValid(destinationCoordinate) else {
                         failed += 1
                         continue
@@ -208,12 +210,7 @@ struct MapView: View {
                     }
 
                     do {
-                        let directions = MKDirections(request: request)
-                        let response = try await withTaskCancellationHandler {
-                            try await directions.calculate()
-                        } onCancel: {
-                            Task { @MainActor in directions.cancel() }
-                        }
+                        let response = try await MKDirections(request: request).calculateRoute()
                         guard !Task.isCancelled else { return }
                         if let line = response.routes.first?.polyline {
                             lines.append(line)
@@ -223,7 +220,10 @@ struct MapView: View {
                     } catch {
                         guard !Task.isCancelled else { return }
                         failed += 1
-                        if firstRoutingError == nil {
+                        if case RouteMetricsError.throttled = RouteMetricsError.classify(error) {
+                            wasThrottled = true
+                            firstRoutingError = "Apple Maps is limiting route requests right now. Reopen the map in about a minute."
+                        } else if firstRoutingError == nil {
                             firstRoutingError = error.localizedDescription
                         }
                     }

@@ -63,11 +63,11 @@ struct RoutePlannerView: View {
 
                         StepperRow(title: "Days of trip",
                                    value: $viewModel.tripDays,
-                                   range: 1...14)
+                                   range: RoutePlannerViewModel.tripDaysRange)
 
                         StepperRow(title: "Places per day",
                                    value: $viewModel.placesPerDay,
-                                   range: 1...10)
+                                   range: RoutePlannerViewModel.placesPerDayRange)
                     }
                     .padding(16)
                     .background(cardBg)

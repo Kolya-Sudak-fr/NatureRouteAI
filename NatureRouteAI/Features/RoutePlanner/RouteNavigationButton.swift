@@ -46,7 +46,7 @@ struct RouteNavigationButton: View {
         }
 
         do {
-            stops = try firstDay.places.map {
+            stops = try firstDay.orderedPlaces.map {
                 try NavigationStop(name: $0.name, latitude: $0.latitude, longitude: $0.longitude)
             }
             isChoosingProvider = true

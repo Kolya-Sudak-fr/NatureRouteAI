@@ -15,11 +15,12 @@ protocol RouteGenerating {
 @MainActor
 class RouteGenerator: RouteGenerating {
     
-    private let networkService = NetworkService()
+    private let networkService: NetworkService
     private let metricsProvider: RouteMetricsProviding
     private let placeSearchRadiusMeters = 50_000
 
-    init(metricsProvider: RouteMetricsProviding? = nil) {
+    init(metricsProvider: RouteMetricsProviding? = nil, networkService: NetworkService? = nil) {
+        self.networkService = networkService ?? NetworkService()
         self.metricsProvider = metricsProvider ?? MapKitRouteMetricsService()
     }
     
@@ -102,6 +103,11 @@ class RouteGenerator: RouteGenerating {
             metricsProvider: metricsProvider
         )
         try Task.checkCancellation()
+        // A route cut short by MapKit would look like a shortage of places.
+        if planningResult.routingInterrupted,
+           planningResult.days.flatMap({ $0 }).count < days * placesPerDay {
+            throw AppError.routeServiceUnavailable
+        }
         let routeDays = planningResult.days.enumerated().map { index, candidates in
             RouteDay(
                 dayNumber: index + 1,
@@ -118,6 +124,9 @@ class RouteGenerator: RouteGenerating {
         }
 
         guard routeDays.contains(where: { !$0.places.isEmpty }) else {
+            if planningResult.hadServiceFailure {
+                throw AppError.routeServiceUnavailable
+            }
             if planningResult.requestLimitReached {
                 throw AppError.routePlanningLimitReached
             }

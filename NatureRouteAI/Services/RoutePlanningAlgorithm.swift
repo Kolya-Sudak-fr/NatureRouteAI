@@ -16,9 +16,20 @@ struct RoutePlaceCandidate: Equatable {
 struct RoutePlanningResult {
     let days: [[RoutePlaceCandidate]]
     let requestLimitReached: Bool
+    /// MapKit stopped answering, so the remaining stops were never checked.
+    var routingInterrupted = false
+    var hadServiceFailure = false
 }
 
 enum RoutePlanningAlgorithm {
+    /// MapKit allows about 50 directions requests per minute. Keeping generation
+    /// below that leaves room for the map to draw the finished route.
+    nonisolated static let defaultRequestBudget = 40
+    private static let maxCandidatesPerStop = 4
+    /// While throttling, MapKit also reports generic failures instead of
+    /// `loadingThrottled`. A long unbroken run of them means it stopped answering.
+    private static let maxConsecutiveServiceFailures = 8
+
     private struct Coordinate {
         let latitude: Double
         let longitude: Double
@@ -79,7 +90,8 @@ enum RoutePlanningAlgorithm {
         transport: TransportMode,
         originLatitude: Double,
         originLongitude: Double,
-        metricsProvider: RouteMetricsProviding
+        metricsProvider: RouteMetricsProviding,
+        requestBudget: Int = defaultRequestBudget
     ) async throws -> RoutePlanningResult {
         try Task.checkCancellation()
         guard placesPerDay > 0 else {
@@ -92,12 +104,16 @@ enum RoutePlanningAlgorithm {
         var remaining = uniqueCandidates(candidates)
         var days: [[RoutePlaceCandidate]] = []
         var didReachRequestLimit = false
+        var routingInterrupted = false
+        var hadServiceFailure = false
+        var consecutiveServiceFailures = 0
+        var requestsUsed = 0
 
-        for preference in dayPreferences {
+        for (dayIndex, preference) in dayPreferences.enumerated() {
             try Task.checkCancellation()
             var day: [RoutePlaceCandidate] = []
             var current = Coordinate(latitude: originLatitude, longitude: originLongitude)
-            while day.count < placesPerDay {
+            while day.count < placesPerDay, !routingInterrupted {
                 try Task.checkCancellation()
                 let eligible = remaining.indices.filter {
                     remaining[$0].preferences.contains(preference)
@@ -121,21 +137,29 @@ enum RoutePlanningAlgorithm {
                     continue
                 }
 
-                // Start with four geographically promising candidates. If none
-                // has a routable path, inspect the next batch instead of ending
-                // the day while usable candidates remain.
+                // Start with the geographically most promising candidates, sharing
+                // the remaining requests across the remaining stops. If none has a
+                // routable path, inspect the next batch instead of ending the day
+                // while usable candidates remain.
+                let remainingStops = (dayPreferences.count - dayIndex) * placesPerDay - day.count
+                let batchSize = candidatesPerStop(
+                    remainingBudget: requestBudget - requestsUsed,
+                    remainingStops: remainingStops
+                )
                 var batchStart = 0
                 var requestBudgetExhausted = false
                 while batchStart < sortedEligible.count, ranked.isEmpty, !requestBudgetExhausted {
-                    let batchEnd = min(batchStart + 4, sortedEligible.count)
+                    let batchEnd = min(batchStart + batchSize, sortedEligible.count)
                     for index in sortedEligible[batchStart..<batchEnd] {
                         try Task.checkCancellation()
+                        requestsUsed += 1
                         do {
                             let metrics = try await metricsProvider.metrics(
                                 from: current.latitude, longitude: current.longitude,
                                 to: remaining[index], transport: transport
                             )
                             try Task.checkCancellation()
+                            consecutiveServiceFailures = 0
                             guard metrics.distanceMeters.isFinite,
                                   metrics.expectedTravelTime.isFinite,
                                   metrics.distanceMeters > 0,
@@ -145,6 +169,21 @@ enum RoutePlanningAlgorithm {
                             requestBudgetExhausted = true
                             didReachRequestLimit = true
                             break
+                        } catch RouteMetricsError.throttled {
+                            // Every further request would only extend the throttling.
+                            requestBudgetExhausted = true
+                            routingInterrupted = true
+                            break
+                        } catch RouteMetricsError.serviceUnavailable {
+                            try Task.checkCancellation()
+                            hadServiceFailure = true
+                            consecutiveServiceFailures += 1
+                            if consecutiveServiceFailures >= maxConsecutiveServiceFailures {
+                                requestBudgetExhausted = true
+                                routingInterrupted = true
+                                break
+                            }
+                            continue
                         } catch is CancellationError {
                             throw CancellationError()
                         } catch {
@@ -165,7 +204,16 @@ enum RoutePlanningAlgorithm {
         }
 
         try Task.checkCancellation()
-        return RoutePlanningResult(days: days, requestLimitReached: didReachRequestLimit)
+        return RoutePlanningResult(
+            days: days,
+            requestLimitReached: didReachRequestLimit,
+            routingInterrupted: routingInterrupted,
+            hadServiceFailure: hadServiceFailure
+        )
+    }
+
+    private static func candidatesPerStop(remainingBudget: Int, remainingStops: Int) -> Int {
+        max(1, min(maxCandidatesPerStop, remainingBudget / max(remainingStops, 1)))
     }
 
     static func distanceMeters(_ first: RoutePlaceCandidate, _ second: RoutePlaceCandidate) -> Double {

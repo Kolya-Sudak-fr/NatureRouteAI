@@ -27,7 +27,16 @@ import SwiftData
     var dayNumber: Int
     @Relationship(deleteRule: .cascade) var places: [Place]
 
+    /// SwiftData doesn't keep the order of a to-many relationship, so the
+    /// planned stop order is stored on each place.
+    var orderedPlaces: [Place] {
+        places.sorted { $0.position < $1.position }
+    }
+
     init(dayNumber: Int, places: [Place]) {
+        for (index, place) in places.enumerated() {
+            place.position = index
+        }
         self.dayNumber = dayNumber
         self.places = places
     }
@@ -40,6 +49,8 @@ import SwiftData
     var city: String?
     var latitude: Double
     var longitude: Double
+    /// Default value lets routes saved before this field existed migrate.
+    var position: Int = 0
     @Transient var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }

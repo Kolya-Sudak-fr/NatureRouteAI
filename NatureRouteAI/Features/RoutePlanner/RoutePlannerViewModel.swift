@@ -23,6 +23,10 @@ class RoutePlannerViewModel: ObservableObject {
     @Published private(set) var isCancelling = false
     @Published var errorMessage: String?
 
+    // 7 × 5 = 35 stops stays within RoutePlanningAlgorithm.defaultRequestBudget.
+    static let tripDaysRange = 1...7
+    static let placesPerDayRange = 1...5
+
     // View спрашивает ViewModel — можно ли нажать кнопку
     var canGenerate: Bool {
         !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -110,6 +114,10 @@ class RoutePlannerViewModel: ObservableObject {
                 if availableCount < requestedCount {
                     errorMessage = "Only \(availableCount) unique nature spots could be added to the requested \(requestedCount)-stop plan. This partial route keeps every stop unique."
                 }
+            } catch where Task.isCancelled {
+                // The user cancelled, so a late answer from the service isn't news.
+                guard generationID == currentGenerationID else { return }
+                errorMessage = nil
             } catch let appError as AppError {
                 guard generationID == currentGenerationID else { return }
                 errorMessage = appError.userMessage
@@ -162,7 +170,7 @@ class RoutePlannerViewModel: ObservableObject {
 
     private func persistentCopy(of route: Route) -> Route {
         let copiedDays = route.days.map { day in
-            let copiedPlaces = day.places.map { place in
+            let copiedPlaces = day.orderedPlaces.map { place in
                 let copy = Place(
                     name: place.name,
                     type: place.type,
