@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import XCTest
 import SwiftData
@@ -9,6 +10,43 @@ final class SavedRoutesTests: XCTestCase {
         let route = Route(city: nil, days: [RouteDay(dayNumber: 1, places: [])])
         XCTAssertTrue(SavedRouteCardPresentation.categories(for: route).isEmpty)
         XCTAssertFalse(SavedRouteCardPresentation.imageSymbol(for: route).isEmpty)
+    }
+
+    func testCountsUseTheSingularForOne() {
+        XCTAssertEqual(SavedRouteCardPresentation.dayCount(1), "1 day")
+        XCTAssertEqual(SavedRouteCardPresentation.dayCount(3), "3 days")
+        XCTAssertEqual(SavedRouteCardPresentation.placeCount(1), "1 place")
+        XCTAssertEqual(SavedRouteCardPresentation.placeCount(0), "0 places")
+    }
+
+    func testMapThumbnailRegionContainsEveryStop() throws {
+        let region = try XCTUnwrap(RouteMapSnapshot.region(containing: [
+            CLLocationCoordinate2D(latitude: 52.0, longitude: 4.0),
+            CLLocationCoordinate2D(latitude: 53.0, longitude: 6.0)
+        ]))
+        XCTAssertEqual(region.center.latitude, 52.5, accuracy: 0.001)
+        XCTAssertEqual(region.center.longitude, 5.0, accuracy: 0.001)
+        XCTAssertGreaterThan(region.span.latitudeDelta, 1.0)
+        XCTAssertGreaterThan(region.span.longitudeDelta, 2.0)
+    }
+
+    func testMapThumbnailKeepsASingleStopInContext() throws {
+        let region = try XCTUnwrap(RouteMapSnapshot.region(containing: [
+            CLLocationCoordinate2D(latitude: 52.0, longitude: 4.0)
+        ]))
+        XCTAssertGreaterThan(region.span.latitudeDelta, 0)
+        XCTAssertGreaterThan(region.span.longitudeDelta, 0)
+    }
+
+    func testMapThumbnailIgnoresInvalidCoordinates() throws {
+        XCTAssertNil(RouteMapSnapshot.region(containing: []))
+        XCTAssertNil(RouteMapSnapshot.region(containing: [kCLLocationCoordinate2DInvalid]))
+
+        let region = try XCTUnwrap(RouteMapSnapshot.region(containing: [
+            kCLLocationCoordinate2DInvalid,
+            CLLocationCoordinate2D(latitude: 10, longitude: 20)
+        ]))
+        XCTAssertEqual(region.center.latitude, 10, accuracy: 0.001)
     }
 
     func testCoverSelectionIsStableAndDifferentForRoutesInSameCity() throws {

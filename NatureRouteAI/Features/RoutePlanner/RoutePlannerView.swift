@@ -115,6 +115,7 @@ struct RoutePlannerView: View {
                             .font(.headline)
                             .foregroundColor(.white)
 
+                        // Equal heights even when one label wraps to two lines.
                         HStack(spacing: 8) {
                             ForEach(TransportMode.allCases) { mode in
                                 TransportChip(
@@ -124,6 +125,7 @@ struct RoutePlannerView: View {
                                 ) { viewModel.transport = mode }
                             }
                         }
+                        .fixedSize(horizontal: false, vertical: true)
 
                         Text(transportHint)
                             .font(.caption)
@@ -369,6 +371,7 @@ struct StepperRow: View {
                     .frame(width: 30, height: 30)
                     .background(Circle().fill(fieldBg))
             }
+            .accessibilityLabel("Decrease \(title.lowercased())")
 
             Text("\(value)")
                 .font(.headline)
@@ -385,6 +388,7 @@ struct StepperRow: View {
                     .frame(width: 30, height: 30)
                     .background(Circle().fill(fieldBg))
             }
+            .accessibilityLabel("Increase \(title.lowercased())")
         }
         .padding(14)
         .background(Color(red: 0.10, green: 0.13, blue: 0.10))
@@ -408,8 +412,9 @@ struct TransportChip: View {
                 Text(mode.displayName)
                     .font(.caption)
                     .fontWeight(isSelected ? .bold : .regular)
+                    .multilineTextAlignment(.center)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.vertical, 10)
             .foregroundColor(isSelected ? .black : .white)
             .background(
@@ -433,25 +438,28 @@ struct PreferenceRow: View {
     let green: Color
     let onTap: (Bool) -> Void
 
-    var emoji: String {
+    var symbol: String {
         switch preference.title {
-        case "Mountains": return "⛰️"
-        case "Forest": return "🌲"
-        case "Lakes": return "🏞️"
-        case "Waterfalls": return "💦"
-        case "National Parks": return "🌳"
-        default: return "🌿"
+        case "Mountains": return "mountain.2.fill"
+        case "Forest": return "tree.fill"
+        case "Lakes": return "water.waves"
+        case "Waterfalls": return "drop.fill"
+        case "National Parks": return "leaf.fill"
+        default: return "leaf"
         }
     }
 
     var body: some View {
         HStack {
-            Text(emoji)
+            Image(systemName: symbol)
                 .font(.title3)
+                .foregroundColor(green)
+                .frame(width: 32)
+                .accessibilityHidden(true)
             Text(preference.title)
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Toggle("", isOn: Binding(
+            Toggle(preference.title, isOn: Binding(
                 get: { preference.isSelected },
                 set: { onTap($0) }
             ))

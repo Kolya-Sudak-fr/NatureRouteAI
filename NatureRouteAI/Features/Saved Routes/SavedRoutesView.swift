@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct SavedRoutesView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -128,7 +129,7 @@ struct SavedRoutesView: View {
             try SavedRouteStore.delete(route, from: modelContext)
             deletionConfirmation.cancel()
             withAnimation(RouteMotion.animation(RouteMotion.reveal, reduceMotion: reduceMotion)) {
-                removedRouteIDs.insert(route.id)
+                _ = removedRouteIDs.insert(route.id)
             }
         } catch {
             deletionError = error.localizedDescription
@@ -284,15 +285,11 @@ struct RouteCard: View {
                     .lineLimit(compact ? 1 : 2)
                     .truncationMode(.tail)
 
-                ViewThatFits(in: .horizontal) {
-                    metadata(compact: false)
-                    metadata(compact: true)
-                }
+                metadata
 
                 Text(route.createdAt.formatted(date: .abbreviated, time: .omitted))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -306,23 +303,31 @@ struct RouteCard: View {
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    private func metadata(compact: Bool) -> some View {
-        Group {
-            if compact {
-                HStack(spacing: 8) {
-                    Label("\(route.days.count) days", systemImage: "calendar")
-                    Label("\(totalPlaces) places", systemImage: "mappin.and.ellipse")
-                }
+    private var dayLabel: some View {
+        Label(SavedRouteCardPresentation.dayCount(route.days.count), systemImage: "calendar")
+    }
+
+    private var placeLabel: some View {
+        Label(SavedRouteCardPresentation.placeCount(totalPlaces), systemImage: "mappin.and.ellipse")
+    }
+
+    private var transportLabel: some View {
+        Label(route.transportMode.displayName, systemImage: route.transportMode.systemIcon)
+    }
+
+    /// One row when everything fits, otherwise two, and one per line at the
+    /// largest text sizes, so details wrap instead of turning into "...".
+    private var metadata: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 11) { dayLabel; placeLabel; transportLabel }
                 .lineLimit(1)
-            } else {
-                HStack(spacing: 11) {
-                    Label("\(route.days.count) days", systemImage: "calendar")
-                    Label("\(totalPlaces) places", systemImage: "mappin.and.ellipse")
-                    Label(route.transportMode.displayName, systemImage: route.transportMode.systemIcon)
-                        .lineLimit(1)
-                }
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) { dayLabel; placeLabel }
+                transportLabel
             }
+            .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) { dayLabel; placeLabel; transportLabel }
+                .fixedSize(horizontal: false, vertical: true)
         }
         .font(.caption.weight(.medium))
         .foregroundStyle(.secondary)
@@ -331,6 +336,14 @@ struct RouteCard: View {
 }
 
 enum SavedRouteCardPresentation {
+    static func dayCount(_ count: Int) -> String {
+        count == 1 ? "1 day" : "\(count) days"
+    }
+
+    static func placeCount(_ count: Int) -> String {
+        count == 1 ? "1 place" : "\(count) places"
+    }
+
     static func categories(for route: Route) -> [String] {
         Array(Set(route.days.flatMap(\.places).map(\.type))).sorted().prefix(2).map(readableCategory)
     }
@@ -369,7 +382,12 @@ enum SavedRouteCardPresentation {
 }
 
 private struct RouteThumbnail: View {
+    @Environment(\.displayScale) private var displayScale
     let route: Route
+    @State private var mapImage: UIImage?
+
+    // Largest size RouteCard uses. Smaller cards scale this image down.
+    private let imageSide: CGFloat = 88
 
     var body: some View {
         ZStack {
@@ -382,7 +400,19 @@ private struct RouteThumbnail: View {
                 .font(.system(size: 30, weight: .medium))
                 .foregroundStyle(.green)
                 .accessibilityHidden(true)
+
+            if let mapImage {
+                Image(uiImage: mapImage)
+                    .resizable()
+                    .scaledToFill()
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+            }
         }
         .accessibilityLabel("Nature route thumbnail")
+        .task(id: route.id) {
+            let image = await RouteMapSnapshot.image(for: route, side: imageSide, displayScale: displayScale)
+            withAnimation(.easeIn(duration: 0.2)) { mapImage = image }
+        }
     }
 }

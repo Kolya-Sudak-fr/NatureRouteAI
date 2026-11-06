@@ -19,15 +19,6 @@ enum TransportMode: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    var emoji: String {
-        switch self {
-        case .walking: return "🚶"
-        case .cycling: return "🚲"
-        case .car:     return "🚗"
-        case .publicTransport: return "🚌"
-        }
-    }
-
     var systemIcon: String {
         switch self {
         case .walking: return "figure.walk"

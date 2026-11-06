@@ -53,10 +53,9 @@ struct RouteDetailView: View {
                     }
 
                     // Summary chips
-                    HStack(spacing: 10) {
-                        InfoChip(icon: route.transportMode.systemIcon, text: route.transportMode.displayName)
-                        InfoChip(icon: "calendar", text: "\(route.days.count) days")
-                        InfoChip(icon: "mappin", text: "\(totalPlaces) places")
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { summaryChips }
+                        VStack(alignment: .leading, spacing: 10) { summaryChips }
                     }
 
                     if let nextStop = orderedPlaces[safe: nextStopIndex] {
@@ -170,6 +169,13 @@ struct RouteDetailView: View {
         } message: {
             Text(navigationError ?? "Please try again.")
         }
+    }
+
+    @ViewBuilder
+    private var summaryChips: some View {
+        InfoChip(icon: route.transportMode.systemIcon, text: route.transportMode.displayName)
+        InfoChip(icon: "calendar", text: SavedRouteCardPresentation.dayCount(route.days.count))
+        InfoChip(icon: "mappin", text: SavedRouteCardPresentation.placeCount(totalPlaces))
     }
 
     var totalPlaces: Int {

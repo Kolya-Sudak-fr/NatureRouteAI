@@ -196,7 +196,7 @@ final class RoutePlannerStateTests: XCTestCase {
         await waitForCompletion(viewModel)
 
         XCTAssertNotNil(viewModel.route)
-        XCTAssertTrue(viewModel.errorMessage?.contains("Only 1 unique nature spots") == true)
+        XCTAssertTrue(viewModel.errorMessage?.contains("Only 1 unique nature spot could") == true)
         XCTAssertFalse(viewModel.errorMessage?.localizedCaseInsensitiveContains("routeable") == true)
     }
 

@@ -112,7 +112,8 @@ class RoutePlannerViewModel: ObservableObject {
                 let requestedCount = requestedDays * requestedPlacesPerDay
                 let availableCount = generatedRoute.days.reduce(0) { $0 + $1.places.count }
                 if availableCount < requestedCount {
-                    errorMessage = "Only \(availableCount) unique nature spots could be added to the requested \(requestedCount)-stop plan. This partial route keeps every stop unique."
+                    let spots = availableCount == 1 ? "spot" : "spots"
+                    errorMessage = "Only \(availableCount) unique nature \(spots) could be added to the requested \(requestedCount)-stop plan. This partial route keeps every stop unique."
                 }
             } catch where Task.isCancelled {
                 // The user cancelled, so a late answer from the service isn't news.
