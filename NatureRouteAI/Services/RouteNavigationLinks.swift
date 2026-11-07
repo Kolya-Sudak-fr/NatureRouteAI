@@ -120,6 +120,7 @@ private extension TransportMode {
         case .walking: "walking"
         case .cycling: "cycling"
         case .car: "driving"
+        case .publicTransport: "transit"
         }
     }
 
@@ -128,6 +129,7 @@ private extension TransportMode {
         case .walking: "walking"
         case .cycling: "bicycling"
         case .car: "driving"
+        case .publicTransport: "transit"
         }
     }
 }

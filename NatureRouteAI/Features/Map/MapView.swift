@@ -3,6 +3,7 @@ import MapKit
 import CoreLocation
 
 struct MapView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var route: Route? = nil
 
@@ -23,6 +24,10 @@ struct MapView: View {
     @State private var isCalculating = false
     @State private var attemptedLegCount = 0
     @State private var failedLegCount = 0
+    @State private var firstRoutingError: String?
+    @State private var selectedPlaceID: UUID?
+    @State private var roadLinesVisible = false
+    @State private var routeCalculationTask: Task<Void, Never>?
 
     struct DayRoadLines: Identifiable {
         let id = UUID()
@@ -49,7 +54,8 @@ struct MapView: View {
         ForEach(Array(sortedDays.enumerated()), id: \.element.id) { index, day in
             ForEach(day.places) { place in
                 Marker(place.name, coordinate: place.coordinate)
-                    .tint(dayColors[index % dayColors.count])
+                    .tint(selectedPlaceID == place.id ? .yellow : dayColors[index % dayColors.count])
+                    .tag(place.id)
             }
         }
     }
@@ -60,14 +66,32 @@ struct MapView: View {
 
     var body: some View {
         ZStack {
-            Map(position: $cameraPosition) {
+            Map(position: $cameraPosition, selection: $selectedPlaceID) {
                 // ЛИНИИ ПО РЕАЛЬНЫМ ДОРОГАМ (от MKDirections)
-                roadLayer
+                if roadLinesVisible {
+                    roadLayer
+                }
 
                 // Маркеры
                 markerLayer
             }
             .ignoresSafeArea()
+
+            if route == nil {
+                ContentUnavailableView {
+                    Label("No route to explore yet", systemImage: "map")
+                } description: {
+                    Text("Generate a nature route to see its stops on the map.")
+                } actions: {
+                    NavigationLink {
+                        RoutePlannerView()
+                    } label: {
+                        Label("Plan a Route", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(24)
+            }
 
             // Индикатор построения маршрутов
             if isCalculating {
@@ -108,9 +132,16 @@ struct MapView: View {
             calculateRoadRoutes()
         }
         .onChange(of: route?.id) {
+            routeCalculationTask?.cancel()
             dayRoads = []
+            roadLinesVisible = false
+            selectedPlaceID = nil
             calculateRoadRoutes()
         }
+        .onDisappear {
+            routeCalculationTask?.cancel()
+        }
+        .animation(RouteMotion.animation(RouteMotion.quick, reduceMotion: reduceMotion), value: selectedPlaceID)
     }
 
     // MARK: - Построение маршрута по реальным дорогам
@@ -118,6 +149,14 @@ struct MapView: View {
     /// Запрашивает у MapKit дорогу между каждой парой соседних мест дня.
     /// MKDirections (.automobile) — путь строится по реальной дорожной сети Apple Maps.
     private func calculateRoadRoutes() {
+        routeCalculationTask?.cancel()
+        if route?.transportMode == .publicTransport {
+            dayRoads = sortedDays.enumerated().map { DayRoadLines(dayIndex: $0.offset, lines: []) }
+            attemptedLegCount = 0
+            failedLegCount = 0
+            isCalculating = false
+            return
+        }
         guard !sortedDays.isEmpty else {
             attemptedLegCount = 0
             failedLegCount = 0
@@ -126,16 +165,23 @@ struct MapView: View {
         }
         isCalculating = true
         dayRoads = []
+        roadLinesVisible = false
         attemptedLegCount = 0
         failedLegCount = 0
+        firstRoutingError = nil
+        let requestedRouteID = route?.id
+        let requestedDays = sortedDays
+        let requestedTransport = route?.transportMode
 
-        Task { @MainActor in
+        routeCalculationTask = Task { @MainActor in
             var result: [DayRoadLines] = []
             var attempted = 0
             var failed = 0
+            var wasThrottled = false
 
-            for (dayIndex, day) in sortedDays.enumerated() {
-                let places = day.places
+            for (dayIndex, day) in requestedDays.enumerated() {
+                guard !Task.isCancelled else { return }
+                let places = day.orderedPlaces
                 guard places.count > 1 else {
                     result.append(DayRoadLines(dayIndex: dayIndex, lines: []))
                     continue
@@ -143,69 +189,91 @@ struct MapView: View {
 
                 var lines: [MKPolyline] = []
                 for i in 0..<(places.count - 1) {
+                    guard !Task.isCancelled else { return }
                     let sourceCoordinate = places[i].coordinate
                     let destinationCoordinate = places[i + 1].coordinate
                     attempted += 1
-                    guard CLLocationCoordinate2DIsValid(sourceCoordinate),
+                    guard !wasThrottled,
+                          CLLocationCoordinate2DIsValid(sourceCoordinate),
                           CLLocationCoordinate2DIsValid(destinationCoordinate) else {
                         failed += 1
                         continue
                     }
 
                     let request = MKDirections.Request()
-                    request.source = MKMapItem(location: CLLocation(
-                        latitude: sourceCoordinate.latitude,
-                        longitude: sourceCoordinate.longitude
-                    ), address: nil)
-                    request.destination = MKMapItem(location: CLLocation(
-                        latitude: destinationCoordinate.latitude,
-                        longitude: destinationCoordinate.longitude
-                    ), address: nil)
-                    switch route?.transportMode {
+                    request.source = MKMapItem(placemark: MKPlacemark(coordinate: sourceCoordinate))
+                    request.destination = MKMapItem(placemark: MKPlacemark(coordinate: destinationCoordinate))
+                    switch requestedTransport {
                     case .walking: request.transportType = .walking
                     case .cycling: request.transportType = .cycling
                     default:       request.transportType = .automobile
                     }
 
                     do {
-                        let response = try await MKDirections(request: request).calculate()
+                        let response = try await MKDirections(request: request).calculateRoute()
+                        guard !Task.isCancelled else { return }
                         if let line = response.routes.first?.polyline {
                             lines.append(line)
                         } else {
                             failed += 1
                         }
                     } catch {
+                        guard !Task.isCancelled else { return }
                         failed += 1
+                        if case RouteMetricsError.throttled = RouteMetricsError.classify(error) {
+                            wasThrottled = true
+                            firstRoutingError = "Apple Maps is limiting route requests right now. Reopen the map in about a minute."
+                        } else if firstRoutingError == nil {
+                            firstRoutingError = error.localizedDescription
+                        }
                     }
                 }
                 result.append(DayRoadLines(dayIndex: dayIndex, lines: lines))
             }
 
+            guard !Task.isCancelled, route?.id == requestedRouteID else { return }
             dayRoads = result
             attemptedLegCount = attempted
             failedLegCount = failed
             isCalculating = false
+            withAnimation(RouteMotion.animation(RouteMotion.reveal, reduceMotion: reduceMotion)) {
+                roadLinesVisible = true
+            }
 
             // Перекатываем камеру, чтобы весь маршрут по дороге был виден
-            withAnimation(.easeInOut(duration: 0.6)) {
+            if reduceMotion {
                 cameraPosition = .region(fitRegion)
+            } else {
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    cameraPosition = .region(fitRegion)
+                }
             }
         }
     }
 
     private var routingMessage: String? {
+        if route?.transportMode == .publicTransport, !allPlaces.isEmpty {
+            return "NatureRouteAI doesn't calculate public transport routes. The stops remain on the map; open a stop in Apple Maps or Google Maps to check transit directions."
+        }
         guard attemptedLegCount > 0, failedLegCount > 0 else { return nil }
         let modeName: String
         switch route?.transportMode {
         case .walking: modeName = "walking"
         case .cycling: modeName = "cycling"
-        case .car, .none: modeName = "driving"
+        case .car: modeName = "driving"
+        case .publicTransport: modeName = "public transport"
+        case .none: modeName = "driving"
         }
 
         if failedLegCount == attemptedLegCount {
-            return "Places were found, but MapKit couldn't build any \(modeName) route segments (\(failedLegCount)/\(attemptedLegCount)). The points remain on the map; open a stop individually from the route details."
+            return "Places were found, but MapKit couldn't build any \(modeName) route segments (\(failedLegCount)/\(attemptedLegCount)). The points remain on the map; open a stop individually from the route details.\(routingErrorDetail)"
         }
-        return "MapKit couldn't build \(failedLegCount) of \(attemptedLegCount) \(modeName) route segments. All found places remain on the map; you can navigate to each stop individually."
+        return "MapKit couldn't build \(failedLegCount) of \(attemptedLegCount) \(modeName) route segments. All found places remain on the map; you can navigate to each stop individually.\(routingErrorDetail)"
+    }
+
+    private var routingErrorDetail: String {
+        guard let firstRoutingError else { return "" }
+        return " Details: \(firstRoutingError)"
     }
 
     // MARK: - Область видимости (точки + построенные дороги)

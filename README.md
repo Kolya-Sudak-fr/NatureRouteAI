@@ -1,61 +1,88 @@
-# NatureRouteAI 🌿
+# NatureRouteAI
 
-NatureRouteAI is an iOS app for planning multi-day trips around real nature spots. Choose a city, trip length, transport mode, and the landscapes you enjoy; the app finds places and displays your itinerary on a map.
+NatureRouteAI is an iOS app for planning multi-day nature trips. Choose a city, trip length, transport mode, and nature preferences to build a route from real OpenTripMap places.
 
-> **Project status:** MVP in progress. Places are sourced from OpenTripMap, and route segments are calculated with MapKit. Route generation is currently data-driven; LLM-powered suggestions are not implemented yet.
+## Current MVP
 
-## Screenshots
+- Search for mountains, forests, lakes, waterfalls, and national parks within 50 km of a city.
+- Distribute unique stops across requested days; return a partial route when there are not enough places.
+- Use MapKit travel distance and estimated travel time to rank nearby candidates for walking, cycling, and driving.
+- Show each day's stops with MapKit travel distance and time, and draw successfully calculated within-day route segments on a map.
+- Open route directions in Apple Maps or Google Maps. Public transport directions are external; the app does not calculate transit routes or schedules.
+- Save, reopen, and delete routes locally with SwiftData.
+- Show user-facing search, routing, save, and delete states.
 
-| Home | Route planner | Map |
-|:---:|:---:|:---:|
-| ![NatureRouteAI home screen](docs/screenshots/home.png) | ![NatureRouteAI route planner](docs/screenshots/planner.png) | ![NatureRouteAI map](docs/screenshots/map.png) |
+Route generation is data-driven and deterministic. It does not currently use an LLM or claim to find a “perfect” route.
 
-## What it can do
+## Requirements
 
-- Find nature spots near a city using selected preferences: mountains, forests, lakes, waterfalls, and national parks.
-- Build a multi-day itinerary with adjustable trip length and places per day.
-- Choose walking, cycling, or driving for route directions.
-- Show places and available route segments on an interactive MapKit map.
-- Open a route or an individual stop in Apple Maps or Google Maps.
-- Save routes locally with SwiftData and continue through stops in order.
-- Show progress and useful error messages when places or directions are unavailable.
+- Xcode 26 or later
+- iOS 17.0 or later
+- An OpenTripMap API key for live route generation
 
-## Tech stack
+## Local API configuration
 
-| Area | Technology |
-| --- | --- |
-| Language and UI | Swift, SwiftUI |
-| Architecture | MVVM |
-| Networking | URLSession, async/await, OpenTripMap API |
-| Maps and directions | MapKit, CoreLocation |
-| Local persistence | SwiftData |
+The API key is read from `NatureRouteAI/Services/Secrets.swift`. This file is intentionally ignored by Git. For a new checkout:
 
-## Getting started
+1. Copy `NatureRouteAI/Services/Secrets.swift.example` to `NatureRouteAI/Services/Secrets.swift`.
+2. Replace the placeholder with your OpenTripMap key.
+3. Keep `Secrets.swift` out of commits.
 
-1. Open `NatureRouteAI/NatureRouteAI.xcodeproj` in Xcode.
-2. Configure an OpenTripMap API key in your local `NatureRouteAI/Services/Secrets.swift`. This local secrets file is ignored by Git. Never commit API keys or credentials.
-3. Select the NatureRouteAI scheme and run the app on an available iOS simulator or device.
+An API key embedded in an iOS app can be extracted from the installed binary. A backend proxy with server-side key storage and request limits is required before treating the key as confidential in a public release.
+
+## Build and test
+
+Open `NatureRouteAI.xcodeproj`, select the `NatureRouteAI` scheme, and run on an iOS 17+ simulator or device. The `NatureRouteAITests` scheme action contains unit tests for route planning, persistence, and planner state.
+
+```sh
+xcodebuild -project NatureRouteAI.xcodeproj \
+  -scheme NatureRouteAI \
+  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  test
+```
+
+## Architecture
+
+```mermaid
+flowchart LR
+    V[RoutePlannerView] --> VM[RoutePlannerViewModel]
+    VM --> RG[RouteGenerator]
+    RG --> CG[CityGeocoder]
+    CG --> MK
+    RG --> NS[NetworkService]
+    NS --> API[(OpenTripMap)]
+    RG --> RM[RouteMetricsService]
+    RM --> MK[MapKit Directions]
+    VM --> SD[SwiftData]
+    SD --> SR[SavedRoutesView]
+    V --> M[MapView]
+```
+
+- **SwiftUI views** render state and handle user actions.
+- **`RoutePlannerViewModel`** owns planner state and async generation, save, and cancellation actions.
+- **`RouteGenerator`** searches candidates and distributes them across days.
+- **`CityGeocoder`** resolves the entered city with Apple's `MKLocalSearch`.
+- **`NetworkService`** downloads OpenTripMap places.
+- **`RouteMetricsService`** obtains real walking, cycling, and driving metrics from MapKit; public transit remains external.
+- **SwiftData models** persist routes, days, and places on-device.
 
 ## Project structure
 
 ```text
 NatureRouteAI/
-├── Models/          Route, RouteDay, Place, NaturePreference, TransportMode
-├── Services/        NetworkService, RouteGenerator, RouteNavigationLinks, AppError
-└── Features/
-    ├── Home/
-    ├── RoutePlanner/
-    ├── Map/
-    └── Saved Routes/
+├── Models/
+├── Services/
+├── Design/
+├── Features/
+│   ├── Home/
+│   ├── RoutePlanner/
+│   ├── Saved Routes/
+│   └── Map/
+└── Assets.xcassets/
 ```
 
-## Current limitations and next steps
+The app currently uses a dark appearance. Housing, food, facilities, taxi integrations, internal transit planning, and monetization are future product work.
 
-- Nature spots come from OpenTripMap; route directions depend on MapKit coverage and may be unavailable for some segments.
-- External navigation services can limit the number of stops in one route link, so longer itineraries continue one stop at a time.
-- LLM suggestions, food and facilities discovery, accommodation search, accounts, and cloud sync are future work.
-- Automated test coverage and CI build checks are not yet part of this MVP.
+## About
 
-## Data and credentials
-
-Place data is provided by [OpenTripMap](https://opentripmap.io/product). You need your own API key to run the app. Keep credentials in local configuration and out of source control.
+Built by Mykola Sudak, an iOS developer based in the Netherlands.

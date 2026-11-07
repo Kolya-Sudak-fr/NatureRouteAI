@@ -6,14 +6,44 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		93C2B17B309527A600E58400 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9362903F2F62D95A00E33040 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 936290462F62D95A00E33040;
+			remoteInfo = NatureRouteAI;
+		};
+		A10000000000000000000007 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9362903F2F62D95A00E33040 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 936290462F62D95A00E33040;
+			remoteInfo = NatureRouteAI;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		936290472F62D95A00E33040 /* NatureRouteAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NatureRouteAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		93C2B17230951F7800E58400 /* NatureRouteAI.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = NatureRouteAI.xctestplan; sourceTree = "<group>"; };
+		93C2B177309527A600E58400 /* NatureRouteAIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NatureRouteAIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000002 /* NatureRouteAITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NatureRouteAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		936290492F62D95A00E33040 /* NatureRouteAI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = NatureRouteAI;
+			sourceTree = "<group>";
+		};
+		93C2B178309527A600E58400 /* NatureRouteAIUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = NatureRouteAIUITests;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000001 /* NatureRouteAITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = NatureRouteAITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -26,13 +56,30 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		93C2B174309527A600E58400 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		9362903E2F62D95A00E33040 = {
 			isa = PBXGroup;
 			children = (
+				93C2B17230951F7800E58400 /* NatureRouteAI.xctestplan */,
 				936290492F62D95A00E33040 /* NatureRouteAI */,
+				A10000000000000000000001 /* NatureRouteAITests */,
+				93C2B178309527A600E58400 /* NatureRouteAIUITests */,
 				936290482F62D95A00E33040 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +88,8 @@
 			isa = PBXGroup;
 			children = (
 				936290472F62D95A00E33040 /* NatureRouteAI.app */,
+				A10000000000000000000002 /* NatureRouteAITests.xctest */,
+				93C2B177309527A600E58400 /* NatureRouteAIUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +119,50 @@
 			productReference = 936290472F62D95A00E33040 /* NatureRouteAI.app */;
 			productType = "com.apple.product-type.application";
 		};
+		93C2B176309527A600E58400 /* NatureRouteAIUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 93C2B17D309527A600E58400 /* Build configuration list for PBXNativeTarget "NatureRouteAIUITests" */;
+			buildPhases = (
+				93C2B173309527A600E58400 /* Sources */,
+				93C2B174309527A600E58400 /* Frameworks */,
+				93C2B175309527A600E58400 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				93C2B17C309527A600E58400 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				93C2B178309527A600E58400 /* NatureRouteAIUITests */,
+			);
+			name = NatureRouteAIUITests;
+			packageProductDependencies = (
+			);
+			productName = NatureRouteAIUITests;
+			productReference = 93C2B177309527A600E58400 /* NatureRouteAIUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		A10000000000000000000004 /* NatureRouteAITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000000000000000000000B /* Build configuration list for PBXNativeTarget "NatureRouteAITests" */;
+			buildPhases = (
+				A10000000000000000000005 /* Sources */,
+				A10000000000000000000003 /* Frameworks */,
+				A10000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1000000000000000000000A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000001 /* NatureRouteAITests */,
+			);
+			name = NatureRouteAITests;
+			productName = NatureRouteAITests;
+			productReference = A10000000000000000000002 /* NatureRouteAITests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -77,11 +170,19 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2600;
+				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					936290462F62D95A00E33040 = {
 						CreatedOnToolsVersion = 26.0;
+					};
+					93C2B176309527A600E58400 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = 936290462F62D95A00E33040;
+					};
+					A10000000000000000000004 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 936290462F62D95A00E33040;
 					};
 				};
 			};
@@ -100,12 +201,28 @@
 			projectRoot = "";
 			targets = (
 				936290462F62D95A00E33040 /* NatureRouteAI */,
+				A10000000000000000000004 /* NatureRouteAITests */,
+				93C2B176309527A600E58400 /* NatureRouteAIUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		936290452F62D95A00E33040 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		93C2B175309527A600E58400 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000006 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +239,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		93C2B173309527A600E58400 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		93C2B17C309527A600E58400 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 936290462F62D95A00E33040 /* NatureRouteAI */;
+			targetProxy = 93C2B17B309527A600E58400 /* PBXContainerItemProxy */;
+		};
+		A1000000000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 936290462F62D95A00E33040 /* NatureRouteAI */;
+			targetProxy = A10000000000000000000007 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		936290502F62D95C00E33040 /* Debug */ = {
@@ -178,7 +322,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -237,7 +381,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -263,7 +407,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -295,7 +439,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -309,6 +453,86 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		93C2B17E309527A600E58400 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6PS2DKW2D;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = conan.NatureRouteAIUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = NatureRouteAI;
+				TEST_TARGET_USES_UI_TESTING = YES;
+			};
+			name = Debug;
+		};
+		93C2B17F309527A600E58400 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F6PS2DKW2D;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = conan.NatureRouteAIUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = NatureRouteAI;
+				TEST_TARGET_USES_UI_TESTING = YES;
+			};
+			name = Release;
+		};
+		A1000000000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = conan.NatureRouteAITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/NatureRouteAI.app/NatureRouteAI";
+			};
+			name = Debug;
+		};
+		A1000000000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = conan.NatureRouteAITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/NatureRouteAI.app/NatureRouteAI";
 			};
 			name = Release;
 		};
@@ -329,6 +553,24 @@
 			buildConfigurations = (
 				936290532F62D95C00E33040 /* Debug */,
 				936290542F62D95C00E33040 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		93C2B17D309527A600E58400 /* Build configuration list for PBXNativeTarget "NatureRouteAIUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				93C2B17E309527A600E58400 /* Debug */,
+				93C2B17F309527A600E58400 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000000000000000000000B /* Build configuration list for PBXNativeTarget "NatureRouteAITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000000000000000000C /* Debug */,
+				A1000000000000000000000D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -8,11 +8,10 @@ struct RouteDetailView: View {
     @State private var showMap = false
     @State private var isShowingNavigationPicker = false
     @State private var pendingStops: [NavigationStop] = []
-    @State private var pendingProgressIndex: Int?
     @State private var navigationError: String?
     @AppStorage private var nextStopIndex: Int
 
-    // Единая палитра приложения
+    // Shared app color palette
     private let darkBg = Color(red: 0.08, green: 0.10, blue: 0.08)
     private let cardBg = Color(red: 0.15, green: 0.18, blue: 0.15)
     private let green = Color(red: 0.2, green: 0.85, blue: 0.4)
@@ -27,7 +26,7 @@ struct RouteDetailView: View {
     }
 
     private var orderedPlaces: [Place] {
-        orderedDays.flatMap(\.places)
+        orderedDays.flatMap(\.orderedPlaces)
     }
 
     var body: some View {
@@ -54,18 +53,17 @@ struct RouteDetailView: View {
                     }
 
                     // Summary chips
-                    HStack(spacing: 10) {
-                        InfoChip(icon: route.transportMode.systemIcon, text: route.transportMode.displayName)
-                        InfoChip(icon: "calendar", text: "\(route.days.count) days")
-                        InfoChip(icon: "mappin", text: "\(totalPlaces) places")
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { summaryChips }
+                        VStack(alignment: .leading, spacing: 10) { summaryChips }
                     }
 
                     if let nextStop = orderedPlaces[safe: nextStopIndex] {
                         VStack(spacing: 10) {
                             Button {
-                                prepareNavigation(to: nextStop, progressIndex: nextStopIndex)
+                                prepareNavigation(to: [nextStop])
                             } label: {
-                                Label("Следующая остановка", systemImage: "arrow.turn.up.right")
+                                Label("Navigate to Next Stop", systemImage: "arrow.turn.up.right")
                                     .font(.headline)
                                     .fontWeight(.bold)
                                     .foregroundColor(.black)
@@ -74,13 +72,23 @@ struct RouteDetailView: View {
                                     .background(green, in: RoundedRectangle(cornerRadius: 14))
                             }
 
-                            Text("Далее: \(nextStop.name)")
+                            Text("Up next: \(nextStop.name)")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Button {
+                                nextStopIndex = min(nextStopIndex + 1, orderedPlaces.count)
+                            } label: {
+                                Label("Mark as Visited", systemImage: "checkmark.circle")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(green)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                            }
                         }
                     } else {
-                        Label("Все остановки пройдены", systemImage: "checkmark.circle.fill")
+                        Label("All stops visited", systemImage: "checkmark.circle.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(green)
                     }
@@ -89,7 +97,7 @@ struct RouteDetailView: View {
                         Button {
                             startCurrentDayRoute()
                         } label: {
-                            Label("Начать маршрут", systemImage: "play.fill")
+                            Label("Start Route", systemImage: "play.fill")
                                 .font(.headline)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -98,59 +106,13 @@ struct RouteDetailView: View {
                         }
                     }
 
-                    Text("Google Maps включает до четырёх остановок в одной ссылке. Для продолжения откройте следующую точку из NatureRouteAI.")
+                    Text("Google Maps supports up to four stops in one link. To continue, open the next stop from NatureRouteAI.")
                         .font(.caption)
                         .foregroundColor(.gray)
 
                     // Days List (sorted by day number)
                     ForEach(orderedDays) { day in
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Day \(day.dayNumber)")
-                                    .font(.headline)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                Spacer()
-                                Image(systemName: "calendar")
-                                    .font(.subheadline)
-                                    .foregroundColor(green)
-                            }
-
-                            if day.places.isEmpty {
-                                Text("No places planned for this day.")
-                                    .font(.subheadline)
-                                    .foregroundColor(.gray)
-                            } else {
-                                ForEach(Array(day.places.enumerated()), id: \.element.id) { index, place in
-                                    HStack(spacing: 10) {
-                                        Text("\(index + 1)")
-                                            .font(.caption)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.black)
-                                            .frame(width: 22, height: 22)
-                                            .background(Circle().fill(green))
-                                        Text(place.name)
-                                            .font(.subheadline)
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        Text(place.type)
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
-                                        Button {
-                                            prepareNavigation(to: place, progressIndex: nil)
-                                        } label: {
-                                            Image(systemName: "arrow.turn.up.right")
-                                                .foregroundColor(green)
-                                                .padding(.leading, 6)
-                                        }
-                                        .accessibilityLabel("Navigate to \(place.name)")
-                                    }
-                                }
-                            }
-                        }
-                        .padding(16)
-                        .background(cardBg)
-                        .cornerRadius(16)
+                        RouteDayCard(day: day) { prepareNavigation(to: [$0]) }
                     }
                 }
                 .padding(20)
@@ -189,51 +151,53 @@ struct RouteDetailView: View {
                 .padding(.top, 60)
             }
         }
-        .confirmationDialog("Открыть навигацию", isPresented: $isShowingNavigationPicker, titleVisibility: .visible) {
+        .confirmationDialog("Choose a navigation app", isPresented: $isShowingNavigationPicker, titleVisibility: .visible) {
             ForEach(NavigationProvider.allCases) { provider in
                 Button(provider.title) {
                     openNavigation(using: provider)
                 }
             }
-            Button("Отмена", role: .cancel) { }
+            Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Маршрут откроется для режима «\(route.transportMode.displayName)».")
+            Text("The route will open in \(route.transportMode.displayName.lowercased()) mode.")
         }
-        .alert("Не удалось открыть навигатор", isPresented: Binding(
+        .alert("Couldn't Open Navigation", isPresented: Binding(
             get: { navigationError != nil },
             set: { if !$0 { navigationError = nil } }
         )) {
             Button("OK", role: .cancel) { navigationError = nil }
         } message: {
-            Text(navigationError ?? "Попробуйте ещё раз.")
+            Text(navigationError ?? "Please try again.")
         }
+    }
+
+    @ViewBuilder
+    private var summaryChips: some View {
+        InfoChip(icon: route.transportMode.systemIcon, text: route.transportMode.displayName)
+        InfoChip(icon: "calendar", text: SavedRouteCardPresentation.dayCount(route.days.count))
+        InfoChip(icon: "mappin", text: SavedRouteCardPresentation.placeCount(totalPlaces))
     }
 
     var totalPlaces: Int {
         route.days.reduce(0) { $0 + $1.places.count }
     }
 
-    private func prepareNavigation(to place: Place, progressIndex: Int?) {
-        prepareNavigation(to: [place], progressIndex: progressIndex)
-    }
-
     private func startCurrentDayRoute() {
         guard let currentPlace = orderedPlaces[safe: nextStopIndex],
               let day = orderedDays.first(where: { $0.places.contains(where: { $0.id == currentPlace.id }) }),
-              let startIndex = day.places.firstIndex(where: { $0.id == currentPlace.id }) else {
+              let startIndex = day.orderedPlaces.firstIndex(where: { $0.id == currentPlace.id }) else {
             navigationError = NavigationLinkError.noStops.localizedDescription
             return
         }
-        prepareNavigation(to: Array(day.places.dropFirst(startIndex)), progressIndex: nextStopIndex)
+        prepareNavigation(to: Array(day.orderedPlaces.dropFirst(startIndex)))
     }
 
-    private func prepareNavigation(to places: [Place], progressIndex: Int?) {
+    private func prepareNavigation(to places: [Place]) {
         do {
             pendingStops = try places.map {
                 try NavigationStop(name: $0.name, latitude: $0.latitude, longitude: $0.longitude)
             }
             guard !pendingStops.isEmpty else { throw NavigationLinkError.noStops }
-            pendingProgressIndex = progressIndex
             isShowingNavigationPicker = true
         } catch {
             navigationError = error.localizedDescription
@@ -252,9 +216,6 @@ struct RouteDetailView: View {
                 guard didOpen else {
                     navigationError = "\(provider.title) is unavailable. Check the link and try again."
                     return
-                }
-                if let pendingProgressIndex {
-                    nextStopIndex = pendingProgressIndex + 1
                 }
             }
         } catch {

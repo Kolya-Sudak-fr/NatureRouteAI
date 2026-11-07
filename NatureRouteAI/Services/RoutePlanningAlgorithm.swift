@@ -1,0 +1,327 @@
+import Foundation
+
+/// A place returned by a category search. OpenTripMap's `xid` is kept while
+/// planning so the same real-world place can be recognized across searches.
+struct RoutePlaceCandidate: Equatable {
+    var externalID: String?
+    let name: String
+    let type: String
+    let latitude: Double
+    let longitude: Double
+    var preferences: Set<String>
+    let quality: Int?
+    var sourceOrder: Int
+    /// MapKit's metrics from the previous stop, set once the place joins a day.
+    var legMetrics: RouteMetrics? = nil
+}
+
+struct RoutePlanningResult {
+    let days: [[RoutePlaceCandidate]]
+    let requestLimitReached: Bool
+    /// MapKit stopped answering, so the remaining stops were never checked.
+    var routingInterrupted = false
+    var hadServiceFailure = false
+}
+
+enum RoutePlanningAlgorithm {
+    /// MapKit allows about 50 directions requests per minute. Keeping generation
+    /// below that leaves room for the map to draw the finished route.
+    nonisolated static let defaultRequestBudget = 40
+    private static let maxCandidatesPerStop = 4
+    private static let sameNameDistanceMeters = 2_000.0
+    private static let containedNameDistanceMeters = 150.0
+    /// While throttling, MapKit also reports generic failures instead of
+    /// `loadingThrottled`. A long unbroken run of them means it stopped answering.
+    private static let maxConsecutiveServiceFailures = 8
+
+    private struct Coordinate {
+        let latitude: Double
+        let longitude: Double
+    }
+
+    static func uniqueCandidates(_ candidates: [RoutePlaceCandidate]) -> [RoutePlaceCandidate] {
+        var result: [RoutePlaceCandidate] = []
+        var indexByExternalID: [String: Int] = [:]
+
+        for candidate in candidates {
+            let externalID = normalizedID(candidate.externalID)
+            if let externalID,
+               let existingIndex = indexByExternalID[externalID] {
+                result[existingIndex].preferences.formUnion(candidate.preferences)
+                continue
+            }
+
+            // OpenTripMap often lists one place twice under different xids.
+            if let existingIndex = result.indices.first(where: { isSamePlaceByName(result[$0], candidate) }) {
+                result[existingIndex].preferences.formUnion(candidate.preferences)
+                if let externalID {
+                    indexByExternalID[externalID] = existingIndex
+                }
+                continue
+            }
+
+            // When at least one response omits xid, coordinates can identify a
+            // duplicate. Different known IDs always remain distinct, and an
+            // ambiguous coordinate match is left alone.
+            let nearbyMatches = result.indices.filter { index in
+                let existingID = normalizedID(result[index].externalID)
+                guard existingID == nil || externalID == nil || existingID == externalID else {
+                    return false
+                }
+                return distanceMeters(result[index], candidate) <= 20
+            }
+            if let existingIndex = nearbyMatches.count == 1 ? nearbyMatches.first : nil {
+                result[existingIndex].preferences.formUnion(candidate.preferences)
+                if normalizedID(result[existingIndex].externalID) == nil, let externalID {
+                    result[existingIndex].externalID = externalID
+                    indexByExternalID[externalID] = existingIndex
+                }
+                continue
+            }
+
+            let newIndex = result.count
+            result.append(candidate)
+            if let externalID {
+                indexByExternalID[externalID] = newIndex
+            }
+        }
+
+        return result
+    }
+
+    private static func isSamePlaceByName(_ first: RoutePlaceCandidate, _ second: RoutePlaceCandidate) -> Bool {
+        let firstName = normalizedName(first.name)
+        let secondName = normalizedName(second.name)
+        guard !firstName.isEmpty, !secondName.isEmpty else { return false }
+
+        let distance = distanceMeters(first, second)
+        if firstName == secondName { return distance <= sameNameDistanceMeters }
+        // "Ekeberg" and "Ekeberg naturreservat" at the same spot, but not
+        // "Blue Lake" and "Blue Lake View" a kilometre apart.
+        return distance <= containedNameDistanceMeters
+            && (firstName.contains(secondName) || secondName.contains(firstName))
+    }
+
+    private static func normalizedName(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+    }
+
+    private static func normalizedID(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    @MainActor
+    static func distribute(
+        candidates: [RoutePlaceCandidate],
+        dayPreferences: [String],
+        placesPerDay: Int,
+        transport: TransportMode,
+        originLatitude: Double,
+        originLongitude: Double,
+        metricsProvider: RouteMetricsProviding,
+        requestBudget: Int = defaultRequestBudget
+    ) async throws -> RoutePlanningResult {
+        try Task.checkCancellation()
+        guard placesPerDay > 0 else {
+            return RoutePlanningResult(
+                days: Array(repeating: [], count: dayPreferences.count),
+                requestLimitReached: false
+            )
+        }
+
+        var remaining = uniqueCandidates(candidates)
+        var days: [[RoutePlaceCandidate]] = []
+        var didReachRequestLimit = false
+        var routingInterrupted = false
+        var hadServiceFailure = false
+        var consecutiveServiceFailures = 0
+        var requestsUsed = 0
+
+        for (dayIndex, preference) in dayPreferences.enumerated() {
+            try Task.checkCancellation()
+            var day: [RoutePlaceCandidate] = []
+            var current = Coordinate(latitude: originLatitude, longitude: originLongitude)
+            while day.count < placesPerDay, !routingInterrupted {
+                try Task.checkCancellation()
+                // A preference can run out of places. Prefer another selected
+                // category over leaving the day empty.
+                let matching = remaining.indices.filter {
+                    remaining[$0].preferences.contains(preference)
+                }
+                let eligible = matching.isEmpty ? Array(remaining.indices) : matching
+                guard !eligible.isEmpty else { break }
+
+                let sortedEligible = eligible.sorted {
+                    preliminaryScore(remaining[$0], from: current, transport: transport)
+                        < preliminaryScore(remaining[$1], from: current, transport: transport)
+                }
+
+                var ranked: [(index: Int, metrics: RouteMetrics, score: Double)] = []
+                if transport == .publicTransport {
+                    // Transit remains external; choose spots without pretending that
+                    // straight-line distance represents a bus or train journey.
+                    let index = eligible.min { qualityScore(remaining[$0]) < qualityScore(remaining[$1]) }
+                    if let index {
+                        let next = remaining.remove(at: index)
+                        day.append(next)
+                    }
+                    continue
+                }
+
+                // Start with the geographically most promising candidates, sharing
+                // the remaining requests across the remaining stops. If none has a
+                // routable path, inspect the next batch instead of ending the day
+                // while usable candidates remain.
+                let remainingStops = (dayPreferences.count - dayIndex) * placesPerDay - day.count
+                let batchSize = candidatesPerStop(
+                    remainingBudget: requestBudget - requestsUsed,
+                    remainingStops: remainingStops
+                )
+                var batchStart = 0
+                var requestBudgetExhausted = false
+                while batchStart < sortedEligible.count, ranked.isEmpty, !requestBudgetExhausted {
+                    let batchEnd = min(batchStart + batchSize, sortedEligible.count)
+                    for index in sortedEligible[batchStart..<batchEnd] {
+                        try Task.checkCancellation()
+                        requestsUsed += 1
+                        do {
+                            let metrics = try await metricsProvider.metrics(
+                                from: current.latitude, longitude: current.longitude,
+                                to: remaining[index], transport: transport
+                            )
+                            try Task.checkCancellation()
+                            consecutiveServiceFailures = 0
+                            guard metrics.distanceMeters.isFinite,
+                                  metrics.expectedTravelTime.isFinite,
+                                  metrics.distanceMeters > 0,
+                                  metrics.expectedTravelTime > 0 else { continue }
+                            ranked.append((index, metrics, actualScore(remaining[index], metrics: metrics, transport: transport)))
+                        } catch RouteMetricsError.requestLimitReached {
+                            requestBudgetExhausted = true
+                            didReachRequestLimit = true
+                            break
+                        } catch RouteMetricsError.throttled {
+                            // Every further request would only extend the throttling.
+                            requestBudgetExhausted = true
+                            routingInterrupted = true
+                            break
+                        } catch RouteMetricsError.serviceUnavailable {
+                            try Task.checkCancellation()
+                            hadServiceFailure = true
+                            consecutiveServiceFailures += 1
+                            if consecutiveServiceFailures >= maxConsecutiveServiceFailures {
+                                requestBudgetExhausted = true
+                                routingInterrupted = true
+                                break
+                            }
+                            continue
+                        } catch is CancellationError {
+                            throw CancellationError()
+                        } catch {
+                            try Task.checkCancellation()
+                            continue
+                        }
+                    }
+                    if !ranked.isEmpty { break }
+                    batchStart = batchEnd
+                }
+                guard let best = ranked.min(by: { $0.score < $1.score }) else { break }
+                var next = remaining.remove(at: best.index)
+                next.legMetrics = best.metrics
+                current = Coordinate(latitude: next.latitude, longitude: next.longitude)
+                day.append(next)
+            }
+
+            days.append(day)
+        }
+
+        try Task.checkCancellation()
+        return RoutePlanningResult(
+            days: days,
+            requestLimitReached: didReachRequestLimit,
+            routingInterrupted: routingInterrupted,
+            hadServiceFailure: hadServiceFailure
+        )
+    }
+
+    private static func candidatesPerStop(remainingBudget: Int, remainingStops: Int) -> Int {
+        max(1, min(maxCandidatesPerStop, remainingBudget / max(remainingStops, 1)))
+    }
+
+    static func distanceMeters(_ first: RoutePlaceCandidate, _ second: RoutePlaceCandidate) -> Double {
+        distanceMeters(
+            latitude: first.latitude,
+            longitude: first.longitude,
+            toLatitude: second.latitude,
+            toLongitude: second.longitude
+        )
+    }
+
+    private static func preliminaryScore(
+        _ candidate: RoutePlaceCandidate,
+        from current: Coordinate,
+        transport: TransportMode
+    ) -> Double {
+        let distance = distanceMeters(
+            latitude: current.latitude,
+            longitude: current.longitude,
+            toLatitude: candidate.latitude,
+            toLongitude: candidate.longitude
+        ) / 1_000
+        let range = transport.preferredStopDistanceKilometers
+        let preferredDistance = (range.lowerBound + range.upperBound) / 2
+        let rangePenalty: Double
+        if distance < range.lowerBound {
+            rangePenalty = (range.lowerBound - distance) * 1.2
+        } else if distance > range.upperBound {
+            rangePenalty = (distance - range.upperBound) * 0.6
+        } else {
+            rangePenalty = abs(distance - preferredDistance) * 0.04
+        }
+
+        return rangePenalty + qualityScore(candidate) * 0.08 + Double(candidate.sourceOrder) * 0.0001
+    }
+
+    private static func actualScore(_ candidate: RoutePlaceCandidate, metrics: RouteMetrics, transport: TransportMode) -> Double {
+        let range = transport.preferredStopDistanceKilometers
+        let km = metrics.distanceMeters / 1_000
+        let rangePenalty = km < range.lowerBound ? (range.lowerBound - km) * 1.2 : km > range.upperBound ? (km - range.upperBound) * 0.6 : 0
+        return metrics.expectedTravelTime + rangePenalty * 60 + qualityScore(candidate) * 30
+    }
+
+    private static func qualityScore(_ candidate: RoutePlaceCandidate) -> Double {
+        guard let quality = candidate.quality else { return 0 }
+        return Double(max(0, 3 - quality))
+    }
+
+    private static func distanceMeters(
+        latitude: Double,
+        longitude: Double,
+        toLatitude otherLatitude: Double,
+        toLongitude otherLongitude: Double
+    ) -> Double {
+        let earthRadius = 6_371_000.0
+        let lat1 = latitude * .pi / 180
+        let lat2 = otherLatitude * .pi / 180
+        let deltaLatitude = (otherLatitude - latitude) * .pi / 180
+        let deltaLongitude = (otherLongitude - longitude) * .pi / 180
+        let a = sin(deltaLatitude / 2) * sin(deltaLatitude / 2)
+            + cos(lat1) * cos(lat2) * sin(deltaLongitude / 2) * sin(deltaLongitude / 2)
+        return earthRadius * 2 * atan2(sqrt(a), sqrt(1 - a))
+    }
+}
+
+extension TransportMode {
+    var preferredStopDistanceKilometers: ClosedRange<Double> {
+        switch self {
+        case .walking: 0.5...2
+        case .cycling: 2...7
+        case .car: 3...20
+        case .publicTransport: 2...15
+        }
+    }
+
+}

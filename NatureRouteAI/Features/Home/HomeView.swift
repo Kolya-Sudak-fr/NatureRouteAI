@@ -24,8 +24,10 @@ struct HomeView: View {
                                     .fontWeight(.bold)
                                     .foregroundColor(Color(red: 0.2, green: 0.85, blue: 0.4))
                                 
-                                Text("🌿")
+                                Image(systemName: "leaf.fill")
                                     .font(.largeTitle)
+                                    .foregroundColor(Color(red: 0.2, green: 0.85, blue: 0.4))
+                                    .accessibilityHidden(true)
                             }
                             
                             Text("Discover real nature around you")
@@ -53,7 +55,7 @@ struct HomeView: View {
                                         .fontWeight(.bold)
                                         .foregroundColor(.black)
                                     
-                                    Text("AI builds your perfect nature trip")
+                                    Text("Builds a nature trip from real places")
                                         .font(.caption)
                                         .foregroundColor(.black.opacity(0.6))
                                 }
