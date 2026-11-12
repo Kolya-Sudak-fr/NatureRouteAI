@@ -30,7 +30,7 @@ struct KeywordTripRequestParser: TripRequestParsing {
         .lakes: ["lake", "озер", "meer"],
         .waterfalls: ["waterfall", "водопад"],
         .nationalParks: ["national", "национальн", "nationaal"],
-        .castlesAndAbbeys: ["castle", "замк", "kaste", "abbey", "abdij", "аббат", "абатств", "monaster", "монастыр", "klooster"],
+        .castlesAndAbbeys: ["castle", "замок", "замк", "kaste", "abbey", "abdij", "аббат", "абатств", "monaster", "монастыр", "klooster"],
         .historicSites: ["histor", "истор", "історич", "monument", "памятник", "памятн", "museum", "музе", "archaeolog", "археолог"]
     ]
 

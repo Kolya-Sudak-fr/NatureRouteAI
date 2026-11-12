@@ -10,6 +10,31 @@ protocol RouteGenerating {
         preferences: [String],
         transport: TransportMode
     ) async throws -> Route
+
+    /// Same as above, but skips places whose names are in `excludingPlaceNames`.
+    /// Route options use this so a second option does not repeat the first one's stops.
+    func generateRoute(
+        city: String,
+        days: Int,
+        placesPerDay: Int,
+        preferences: [String],
+        transport: TransportMode,
+        excludingPlaceNames: Set<String>
+    ) async throws -> Route
+}
+
+extension RouteGenerating {
+    /// Generators that know nothing about exclusions ignore them.
+    func generateRoute(
+        city: String,
+        days: Int,
+        placesPerDay: Int,
+        preferences: [String],
+        transport: TransportMode,
+        excludingPlaceNames: Set<String>
+    ) async throws -> Route {
+        try await generateRoute(city: city, days: days, placesPerDay: placesPerDay, preferences: preferences, transport: transport)
+    }
 }
 
 @MainActor
@@ -35,12 +60,36 @@ class RouteGenerator: RouteGenerating {
         TripInterest(title: preference)?.openTripMapKinds ?? "natural"
     }
     
+    /// Matches names the way the planner's duplicate check does: ignores case and accents.
+    static func foldedName(_ name: String) -> String {
+        name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func generateRoute(
         city: String,
         days: Int,
         placesPerDay: Int,
         preferences: [String],
         transport: TransportMode = .walking
+    ) async throws -> Route {
+        try await generateRoute(
+            city: city,
+            days: days,
+            placesPerDay: placesPerDay,
+            preferences: preferences,
+            transport: transport,
+            excludingPlaceNames: []
+        )
+    }
+
+    func generateRoute(
+        city: String,
+        days: Int,
+        placesPerDay: Int,
+        preferences: [String],
+        transport: TransportMode,
+        excludingPlaceNames: Set<String>
     ) async throws -> Route {
         guard days > 0, placesPerDay > 0, !preferences.isEmpty else {
             throw AppError.invalidRouteRequest
@@ -57,6 +106,7 @@ class RouteGenerator: RouteGenerating {
         let uniquePreferences = dayPreferences.filter { seenPreferences.insert($0).inserted }
         var candidates: [RoutePlaceCandidate] = []
         var firstSearchError: Error?
+        let excluded = Set(excludingPlaceNames.map(Self.foldedName))
 
         // Search each selected preference once, requesting enough alternatives
         // to distribute unique spots across every day that uses that preference.
@@ -74,7 +124,7 @@ class RouteGenerator: RouteGenerating {
                     radiusMeters: placeSearchRadiusMeters
                 )
                 try Task.checkCancellation()
-                candidates += fetchedCandidates
+                candidates += fetchedCandidates.filter { !excluded.contains(Self.foldedName($0.name)) }
             } catch AppError.noPlacesFound {
                 try Task.checkCancellation()
                 // Other preferences may still have valid places.
