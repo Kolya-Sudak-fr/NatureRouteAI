@@ -43,6 +43,9 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
 
         var options: [RouteOption] = []
         var firstError: Error?
+        // Places already used by an earlier option. Later options skip them, so the
+        // variants offer different stops instead of the same ones in another order.
+        var usedPlaceNames = Set<String>()
         for variant in variants {
             try Task.checkCancellation()
             do {
@@ -51,8 +54,10 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
                     days: variant.days,
                     placesPerDay: variant.placesPerDay,
                     preferences: variant.preferences,
-                    transport: transport
+                    transport: transport,
+                    excludingPlaceNames: usedPlaceNames
                 )
+                usedPlaceNames.formUnion(route.days.flatMap(\.places).map(\.name))
                 options.append(RouteOption(title: variant.title, subtitle: variant.subtitle, route: route))
             } catch is CancellationError {
                 throw CancellationError()

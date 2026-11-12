@@ -24,6 +24,20 @@ final class RouteOptionsPlannerTests: XCTestCase {
         XCTAssertTrue(generator.calls.allSatisfy { $0.city == "Middelburg" && $0.transport == .car })
     }
 
+    func testLaterOptionsSkipPlacesAlreadyOffered() async throws {
+        let generator = RecordingRouteGenerator()
+        let planner = RouteOptionsPlanner(generator: generator)
+
+        _ = try await planner.options(
+            for: TripRequest(city: "Utrecht", interests: [.castlesAndAbbeys, .historicSites], days: nil),
+            transport: .car
+        )
+
+        XCTAssertEqual(generator.calls[0].excludedNames, [])
+        XCTAssertEqual(generator.calls[1].excludedNames, ["Stop 1"])
+        XCTAssertEqual(generator.calls[2].excludedNames, ["Stop 1", "Stop 2"])
+    }
+
     func testSingleInterestSkipsTheFocusedVariant() async throws {
         let generator = RecordingRouteGenerator()
         let planner = RouteOptionsPlanner(generator: generator)
@@ -137,6 +151,7 @@ private final class RecordingRouteGenerator: RouteGenerating {
         let placesPerDay: Int
         let preferences: [String]
         let transport: TransportMode
+        let excludedNames: Set<String>
     }
 
     private(set) var calls: [Call] = []
@@ -150,12 +165,31 @@ private final class RecordingRouteGenerator: RouteGenerating {
         preferences: [String],
         transport: TransportMode
     ) async throws -> Route {
+        try await generateRoute(
+            city: city,
+            days: days,
+            placesPerDay: placesPerDay,
+            preferences: preferences,
+            transport: transport,
+            excludingPlaceNames: []
+        )
+    }
+
+    func generateRoute(
+        city: String,
+        days: Int,
+        placesPerDay: Int,
+        preferences: [String],
+        transport: TransportMode,
+        excludingPlaceNames: Set<String>
+    ) async throws -> Route {
         calls.append(Call(
             city: city,
             days: days,
             placesPerDay: placesPerDay,
             preferences: preferences,
-            transport: transport
+            transport: transport,
+            excludedNames: excludingPlaceNames
         ))
         if let error = errorsByCall[calls.count] {
             throw error

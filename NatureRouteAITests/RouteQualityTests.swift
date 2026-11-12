@@ -100,6 +100,18 @@ final class RouteQualityTests: XCTestCase {
         XCTAssertEqual(result.days.map(\.count), [2, 2])
     }
 
+    func testExcludedPlaceNamesAreNotUsedAndNamesMatchIgnoringCase() async throws {
+        StubOpenTripMapProtocol.respond = { _ in (200, StubOpenTripMapProtocol.places(count: 8)) }
+        let route = try await makeGenerator().generateRoute(
+            city: "Testville", days: 1, placesPerDay: 4, preferences: ["Forest"], transport: .walking,
+            excludingPlaceNames: ["spot 0", "Spot 1"]
+        )
+
+        let names = route.days.flatMap(\.places).map(\.name)
+        XCTAssertEqual(names.count, 4)
+        XCTAssertFalse(names.contains { ["spot 0", "spot 1"].contains($0.lowercased()) })
+    }
+
     func testLastDaysWithoutPlacesAreDroppedFromTheRoute() async throws {
         StubOpenTripMapProtocol.respond = { _ in (200, StubOpenTripMapProtocol.places(count: 2)) }
         let route = try await makeGenerator().generateRoute(
