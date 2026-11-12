@@ -73,6 +73,22 @@ final class TripRequestParserTests: XCTestCase {
         XCTAssertEqual(request.interests, [.castlesAndAbbeys])
     }
 
+    /// Reported by the user: "замок в Утрехте" returned nothing.
+    /// "замок" (singular, nominative) must count as a castle, not only "замки".
+    func testSingularCastleInRussianFindsCastlesInUtrecht() async throws {
+        let request = try await KeywordTripRequestParser().parse("замок в Утрехте")
+
+        XCTAssertEqual(request.city, "Утрехт")
+        XCTAssertEqual(request.interests, [.castlesAndAbbeys])
+    }
+
+    func testRussianCastleCaseFormsAreRecognised() async throws {
+        for phrase in ["замок", "замки", "замка", "замков", "замке"] {
+            let request = try await KeywordTripRequestParser().parse("\(phrase) в Утрехте")
+            XCTAssertEqual(request.interests, [.castlesAndAbbeys], "phrase: \(phrase)")
+        }
+    }
+
     func testRussianDaysAreRead() async throws {
         let request = try await KeywordTripRequestParser().parse("Утрехт, на 3 дня, водопады")
 
