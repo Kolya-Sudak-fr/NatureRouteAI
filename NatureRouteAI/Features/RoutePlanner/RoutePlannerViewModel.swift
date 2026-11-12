@@ -6,13 +6,9 @@ import SwiftData
 class RoutePlannerViewModel: ObservableObject {
 
     // Всё что раньше было @State в View — теперь здесь
-    @Published var preferences: [NaturePreference] = [
-        NaturePreference(title: "Mountains", isSelected: false),
-        NaturePreference(title: "Forest", isSelected: false),
-        NaturePreference(title: "Lakes", isSelected: false),
-        NaturePreference(title: "Waterfalls", isSelected: false),
-        NaturePreference(title: "National Parks", isSelected: false),
-    ]
+    @Published var preferences: [NaturePreference] = TripInterest.allCases.map {
+        NaturePreference(title: $0.title, isSelected: false)
+    }
     @Published private(set) var savedRouteIDs: Set<UUID> = []
     @Published var city: String = ""
     @Published var tripDays: Int = 3

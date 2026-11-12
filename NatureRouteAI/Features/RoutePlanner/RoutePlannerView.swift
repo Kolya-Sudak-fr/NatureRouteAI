@@ -445,6 +445,8 @@ struct PreferenceRow: View {
         case "Lakes": return "water.waves"
         case "Waterfalls": return "drop.fill"
         case "National Parks": return "leaf.fill"
+        case "Castles & Abbeys": return "building.columns.fill"
+        case "Historic Sites": return "building.2.fill"
         default: return "leaf"
         }
     }
