@@ -113,7 +113,12 @@ class RouteGenerator: RouteGenerating {
         for preference in uniquePreferences {
             try Task.checkCancellation()
             let requiredForPreference = dayPreferences.filter { $0 == preference }.count * placesPerDay
-            let candidateLimit = min(max(requiredForPreference * 2 + 10, requiredForPreference), 200)
+            // OpenTripMap returns the nearest places first and cuts the list at `limit`.
+            // Driving stops are 12–20 km apart, so a small limit keeps every stop in the
+            // city centre. Driving asks for the largest list the service returns.
+            let candidateLimit = transport == .car
+                ? 500
+                : min(max(requiredForPreference * 2 + 10, requiredForPreference), 200)
             do {
                 let fetchedCandidates = try await networkService.fetchPlaces(
                     lat: resolvedCity.latitude,
