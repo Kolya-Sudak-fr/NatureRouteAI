@@ -117,6 +117,11 @@ final class RouteOptionsPlannerTests: XCTestCase {
         XCTAssertEqual(titles.count, TripInterest.allCases.count)
     }
 
+    func testVariantBudgetKeepsTheWholeBatchUnderTheMapKitMinuteLimit() {
+        // MapKit allows about 50 directions requests a minute. The options are built back to back.
+        XCTAssertLessThanOrEqual(RouteOptionsPlanner.requestBudgetPerVariant * 3, 50)
+    }
+
     func testEveryInterestMapsBackToItsPlannerCategory() {
         for interest in TripInterest.allCases {
             XCTAssertEqual(TripInterest(title: interest.title), interest)

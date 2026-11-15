@@ -26,6 +26,16 @@ protocol RouteOptionsPlanning {
 @MainActor
 final class RouteOptionsPlanner: RouteOptionsPlanning {
 
+    /// MapKit allows about 50 directions requests a minute, and the three options are
+    /// built back to back. 3 × 14 = 42 stays under that, so the third option is not
+    /// throttled by the first two.
+    static let requestBudgetPerVariant = 14
+
+    /// The planner the home assistant uses: a generator with the per-variant budget.
+    static func standard() -> RouteOptionsPlanner {
+        RouteOptionsPlanner(generator: RouteGenerator(requestBudget: requestBudgetPerVariant))
+    }
+
     private let generator: RouteGenerating
     private let defaultDays = 2
 
