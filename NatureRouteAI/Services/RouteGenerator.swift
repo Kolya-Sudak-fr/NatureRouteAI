@@ -44,15 +44,20 @@ class RouteGenerator: RouteGenerating {
     private let cityGeocoder: CityGeocoding
     private let metricsProvider: RouteMetricsProviding
     private let placeSearchRadiusMeters = 50_000
+    private let requestBudget: Int
 
+    /// `requestBudget` caps the MapKit directions requests for one route. Callers that
+    /// build several routes in a row lower it so the total stays under MapKit's limit.
     init(
         metricsProvider: RouteMetricsProviding? = nil,
         networkService: NetworkService? = nil,
-        cityGeocoder: CityGeocoding? = nil
+        cityGeocoder: CityGeocoding? = nil,
+        requestBudget: Int = RoutePlanningAlgorithm.defaultRequestBudget
     ) {
         self.cityGeocoder = cityGeocoder ?? MapKitCityGeocoder()
         self.networkService = networkService ?? NetworkService()
         self.metricsProvider = metricsProvider ?? MapKitRouteMetricsService()
+        self.requestBudget = requestBudget
     }
     
     // Маппинг предпочтений пользователя в категории OpenTripMap
@@ -154,7 +159,8 @@ class RouteGenerator: RouteGenerating {
             transport: transport,
             originLatitude: resolvedCity.latitude,
             originLongitude: resolvedCity.longitude,
-            metricsProvider: metricsProvider
+            metricsProvider: metricsProvider,
+            requestBudget: requestBudget
         )
         try Task.checkCancellation()
         // A route cut short by MapKit would look like a shortage of places.
