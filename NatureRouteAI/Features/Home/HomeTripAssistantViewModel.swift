@@ -26,7 +26,7 @@ final class HomeTripAssistantViewModel: ObservableObject {
 
     init(parser: TripRequestParsing = TripRequestParsers.standard(), planner: RouteOptionsPlanning? = nil) {
         self.parser = parser
-        self.planner = planner ?? RouteOptionsPlanner(generator: RouteGenerator())
+        self.planner = planner ?? RouteOptionsPlanner.standard()
     }
 
     var isBusy: Bool {
