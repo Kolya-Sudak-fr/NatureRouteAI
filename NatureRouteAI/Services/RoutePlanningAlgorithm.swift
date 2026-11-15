@@ -133,6 +133,11 @@ enum RoutePlanningAlgorithm {
         }
 
         var remaining = uniqueCandidates(candidates)
+        // A leg within the ceiling is always preferred. A longer leg is used only when
+        // no stop within the ceiling is available, so the day still fills up.
+        let fitsCeiling: (RouteMetrics) -> Bool = { metrics in
+            transport.legCeilingMeters.map { metrics.distanceMeters <= $0 } ?? true
+        }
         var days: [[RoutePlaceCandidate]] = []
         var didReachRequestLimit = false
         var routingInterrupted = false
@@ -182,7 +187,7 @@ enum RoutePlanningAlgorithm {
                 )
                 var batchStart = 0
                 var requestBudgetExhausted = false
-                while batchStart < sortedEligible.count, ranked.isEmpty, !requestBudgetExhausted {
+                while batchStart < sortedEligible.count, !ranked.contains(where: { fitsCeiling($0.metrics) }), !requestBudgetExhausted {
                     let batchEnd = min(batchStart + batchSize, sortedEligible.count)
                     for index in sortedEligible[batchStart..<batchEnd] {
                         try Task.checkCancellation()
@@ -225,10 +230,11 @@ enum RoutePlanningAlgorithm {
                             continue
                         }
                     }
-                    if !ranked.isEmpty { break }
+                    if ranked.contains(where: { fitsCeiling($0.metrics) }) { break }
                     batchStart = batchEnd
                 }
-                guard let best = ranked.min(by: { $0.score < $1.score }) else { break }
+                let withinCeiling = ranked.filter { fitsCeiling($0.metrics) }
+                guard let best = (withinCeiling.isEmpty ? ranked : withinCeiling).min(by: { $0.score < $1.score }) else { break }
                 var next = remaining.remove(at: best.index)
                 next.legMetrics = best.metrics
                 current = Coordinate(latitude: next.latitude, longitude: next.longitude)
@@ -315,11 +321,16 @@ enum RoutePlanningAlgorithm {
 }
 
 extension TransportMode {
+    /// Driving legs longer than this are used only when no closer stop is available.
+    var legCeilingMeters: Double? {
+        self == .car ? 20_000 : nil
+    }
+
     var preferredStopDistanceKilometers: ClosedRange<Double> {
         switch self {
         case .walking: 0.5...2
         case .cycling: 2...7
-        case .car: 3...20
+        case .car: 12...20
         case .publicTransport: 2...15
         }
     }
