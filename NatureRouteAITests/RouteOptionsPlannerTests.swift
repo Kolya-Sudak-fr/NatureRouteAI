@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class RouteOptionsPlannerTests: XCTestCase {
 
-    func testBuildsThreeDistinctOptionsForSeveralInterests() async throws {
+    func testBuildsShorterStandardAndLongerOptions() async throws {
         let generator = RecordingRouteGenerator()
         let planner = RouteOptionsPlanner(generator: generator)
 
@@ -13,32 +13,15 @@ final class RouteOptionsPlannerTests: XCTestCase {
             transport: .car
         )
 
-        XCTAssertEqual(options.map(\.title), ["Balanced", "Focused: Castles & Abbeys", "Relaxed"])
-        XCTAssertEqual(generator.calls.map(\.days), [2, 2, 3])
-        XCTAssertEqual(generator.calls.map(\.placesPerDay), [3, 4, 2])
-        XCTAssertEqual(generator.calls.map(\.preferences), [
-            ["Castles & Abbeys", "Historic Sites"],
-            ["Castles & Abbeys"],
-            ["Castles & Abbeys", "Historic Sites"]
-        ])
+        XCTAssertEqual(options.map(\.title), ["Shorter", "Standard", "Longer"])
+        // Standard is built first, so it keeps the best stops and the others skip them.
+        XCTAssertEqual(generator.calls.map(\.placesPerDay), [3, 2, 4])
+        XCTAssertEqual(generator.calls.map(\.days), [2, 2, 2])
+        XCTAssertTrue(generator.calls.allSatisfy { $0.preferences == ["Castles & Abbeys", "Historic Sites"] })
         XCTAssertTrue(generator.calls.allSatisfy { $0.city == "Middelburg" && $0.transport == .car })
     }
 
-    func testLaterOptionsSkipPlacesAlreadyOffered() async throws {
-        let generator = RecordingRouteGenerator()
-        let planner = RouteOptionsPlanner(generator: generator)
-
-        _ = try await planner.options(
-            for: TripRequest(city: "Utrecht", interests: [.castlesAndAbbeys, .historicSites], days: nil),
-            transport: .car
-        )
-
-        XCTAssertEqual(generator.calls[0].excludedNames, [])
-        XCTAssertEqual(generator.calls[1].excludedNames, ["Stop 1"])
-        XCTAssertEqual(generator.calls[2].excludedNames, ["Stop 1", "Stop 2"])
-    }
-
-    func testSingleInterestSkipsTheFocusedVariant() async throws {
+    func testSingleInterestStillBuildsThreeOptionsOfThatInterest() async throws {
         let generator = RecordingRouteGenerator()
         let planner = RouteOptionsPlanner(generator: generator)
 
@@ -47,8 +30,8 @@ final class RouteOptionsPlannerTests: XCTestCase {
             transport: .car
         )
 
-        XCTAssertEqual(options.map(\.title), ["Balanced", "Relaxed"])
-        XCTAssertEqual(generator.calls.map(\.days), [1, 2])
+        XCTAssertEqual(options.map(\.title), ["Shorter", "Standard", "Longer"])
+        XCTAssertTrue(generator.calls.allSatisfy { $0.days == 1 && $0.preferences == ["Lakes"] })
     }
 
     func testUsesEveryInterestWhenNoneWereNamed() async throws {
@@ -70,7 +53,7 @@ final class RouteOptionsPlannerTests: XCTestCase {
             transport: .car
         )
 
-        XCTAssertEqual(options.map(\.title), ["Balanced", "Relaxed"])
+        XCTAssertEqual(options.map(\.title), ["Standard", "Longer"])
     }
 
     func testThrowsWhenEveryVariantFails() async {

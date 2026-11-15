@@ -61,7 +61,7 @@ final class RoutePlanningAlgorithmTests: XCTestCase {
     func testTransportModesHaveTheirConfiguredPreferredRanges() {
         XCTAssertEqual(TransportMode.walking.preferredStopDistanceKilometers, 0.5...2)
         XCTAssertEqual(TransportMode.cycling.preferredStopDistanceKilometers, 2...7)
-        XCTAssertEqual(TransportMode.car.preferredStopDistanceKilometers, 3...20)
+        XCTAssertEqual(TransportMode.car.preferredStopDistanceKilometers, 12...20)
         XCTAssertEqual(TransportMode.publicTransport.preferredStopDistanceKilometers, 2...15)
     }
 
@@ -113,6 +113,34 @@ final class RoutePlanningAlgorithmTests: XCTestCase {
 
         XCTAssertEqual(result.days[0].map(\.externalID), ["far"])
         XCTAssertGreaterThan(RoutePlanningAlgorithm.distanceMeters(result.days[0][0], candidate(id: "origin", name: "Origin", longitude: 0, preferences: [])) / 1_000, TransportMode.car.preferredStopDistanceKilometers.upperBound)
+    }
+
+    func testCarPrefersAStopWithinTheLegCeilingOverAFartherOne() async throws {
+        // Four far spots rank first on the preliminary score, so the first batch holds only them.
+        let farSpots = (0..<4).map { index in
+            candidate(
+                id: "far-\(index)",
+                name: "Far park \(index)",
+                longitude: (30.0 + Double(index) * 0.01) / 111.195,
+                preferences: ["Park"],
+                quality: 3
+            )
+        }
+        let nearSpot = candidate(id: "near", name: "Near park", longitude: 4.0 / 111.195, preferences: ["Park"], quality: 3)
+
+        let result = try await RoutePlanningAlgorithm.distribute(
+            candidates: farSpots + [nearSpot],
+            dayPreferences: ["Park"],
+            placesPerDay: 1,
+            transport: .car,
+            originLatitude: 0,
+            originLongitude: 0,
+            metricsProvider: TestRouteMetricsProvider()
+        )
+
+        XCTAssertEqual(result.days[0].map(\.externalID), ["near"])
+        let leg = try XCTUnwrap(result.days[0].first?.legMetrics)
+        XCTAssertLessThanOrEqual(leg.distanceMeters, 20_000)
     }
 
     func testRequestLimitIsReportedWhenNoRouteCouldBeConfirmed() async throws {

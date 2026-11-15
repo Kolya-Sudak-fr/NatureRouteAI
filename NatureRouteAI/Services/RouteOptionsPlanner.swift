@@ -15,13 +15,14 @@ protocol RouteOptionsPlanning {
 
 /// Строит до трёх маршрутов из одного запроса, без уточняющих вопросов.
 ///
-/// Варианты отличаются темпом и набором интересов:
-/// - Balanced: все интересы, 3 остановки в день;
-/// - Focused: только первый интерес, 4 остановки в день (если интерес один, вариант не добавляем);
-/// - Relaxed: все интересы, на день больше, 2 остановки в день.
+/// Варианты отличаются длиной, а не интересами: все они берут все интересы запроса.
+/// - Shorter: 2 остановки в день;
+/// - Standard: 3 остановки в день;
+/// - Longer: 4 остановки в день.
 ///
-/// Маршруты строятся по очереди. Каждый тратит лимит запросов MapKit,
-/// и параллельные запросы быстрее упираются в этот лимит.
+/// Места не повторяются между вариантами: каждый следующий вариант пропускает места,
+/// уже показанные предыдущими. Поэтому Standard строится первым и получает лучшие места.
+/// Маршруты строятся по очереди, потому что каждый тратит лимит запросов MapKit.
 @MainActor
 final class RouteOptionsPlanner: RouteOptionsPlanning {
 
@@ -41,7 +42,7 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
             days: request.days ?? defaultDays
         )
 
-        var options: [RouteOption] = []
+        var built: [(placesPerDay: Int, option: RouteOption)] = []
         var firstError: Error?
         // Places already used by an earlier option. Later options skip them, so the
         // variants offer different stops instead of the same ones in another order.
@@ -58,7 +59,10 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
                     excludingPlaceNames: usedPlaceNames
                 )
                 usedPlaceNames.formUnion(route.days.flatMap(\.places).map(\.name))
-                options.append(RouteOption(title: variant.title, subtitle: variant.subtitle, route: route))
+                built.append((
+                    variant.placesPerDay,
+                    RouteOption(title: variant.title, subtitle: variant.subtitle, route: route)
+                ))
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -67,10 +71,11 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
             }
         }
 
-        if options.isEmpty, let firstError {
+        if built.isEmpty, let firstError {
             throw firstError
         }
-        return options
+        // Show the options from shortest to longest, whatever order they were built in.
+        return built.sorted { $0.placesPerDay < $1.placesPerDay }.map(\.option)
     }
 
     struct Variant: Equatable {
@@ -84,26 +89,14 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
         }
     }
 
+    /// Standard идёт первым: он получает лучшие места, остальные обходят их.
     static func variants(interests: [TripInterest], days: Int) -> [Variant] {
         let allTitles = interests.map(\.title)
         let tripDays = min(max(days, 1), 7)
-        var result = [Variant(title: "Balanced", preferences: allTitles, days: tripDays, placesPerDay: 3)]
-
-        if interests.count > 1, let first = interests.first {
-            result.append(Variant(
-                title: "Focused: \(first.title)",
-                preferences: [first.title],
-                days: tripDays,
-                placesPerDay: 4
-            ))
-        }
-
-        result.append(Variant(
-            title: "Relaxed",
-            preferences: allTitles,
-            days: min(tripDays + 1, 7),
-            placesPerDay: 2
-        ))
-        return result
+        return [
+            Variant(title: "Standard", preferences: allTitles, days: tripDays, placesPerDay: 3),
+            Variant(title: "Shorter", preferences: allTitles, days: tripDays, placesPerDay: 2),
+            Variant(title: "Longer", preferences: allTitles, days: tripDays, placesPerDay: 4)
+        ]
     }
 }
