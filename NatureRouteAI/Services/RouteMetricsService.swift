@@ -117,11 +117,20 @@ final class MapKitRouteMetricsService: RouteMetricsProviding {
     }
 
     private let requestLimit: Int
+    /// MapKit can stop calling back without an error. A request that runs this long
+    /// counts as a service failure, so one stuck request cannot stall the whole route.
+    private let requestTimeout: Duration
     private var requestCount = 0
     private var cache: [Key: RouteMetrics] = [:]
     private var planningSessionID = UUID()
 
-    init(requestLimit: Int = RoutePlanningAlgorithm.defaultRequestBudget) { self.requestLimit = max(0, requestLimit) }
+    init(
+        requestLimit: Int = RoutePlanningAlgorithm.defaultRequestBudget,
+        requestTimeout: Duration = .seconds(15)
+    ) {
+        self.requestLimit = max(0, requestLimit)
+        self.requestTimeout = requestTimeout
+    }
 
     func beginPlanningSession() {
         planningSessionID = UUID()
@@ -149,7 +158,11 @@ final class MapKitRouteMetricsService: RouteMetricsProviding {
         let directions = MKDirections(request: request)
         let response: MKDirections.Response
         do {
-            response = try await directions.calculateRoute()
+            response = try await withDeadline(requestTimeout) {
+                try await directions.calculateRoute()
+            }
+        } catch DeadlineError.exceeded {
+            throw RouteMetricsError.serviceUnavailable
         } catch {
             throw RouteMetricsError.classify(error)
         }
