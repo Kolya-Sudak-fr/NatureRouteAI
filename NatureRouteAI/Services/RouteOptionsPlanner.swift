@@ -36,11 +36,17 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
         RouteOptionsPlanner(generator: RouteGenerator(requestBudget: requestBudgetPerVariant))
     }
 
+    /// The whole batch must finish within this time. Options that are ready by then are
+    /// kept; the rest are dropped rather than leaving the user on a spinner.
+    static let totalTimeout: Duration = .seconds(90)
+
     private let generator: RouteGenerating
+    private let totalTimeout: Duration
     private let defaultDays = 2
 
-    init(generator: RouteGenerating) {
+    init(generator: RouteGenerating, totalTimeout: Duration = RouteOptionsPlanner.totalTimeout) {
         self.generator = generator
+        self.totalTimeout = totalTimeout
     }
 
     func options(for request: TripRequest, transport: TransportMode) async throws -> [RouteOption] {
@@ -57,17 +63,26 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
         // Places already used by an earlier option. Later options skip them, so the
         // variants offer different stops instead of the same ones in another order.
         var usedPlaceNames = Set<String>()
+        let clock = ContinuousClock()
+        let started = clock.now
         for variant in variants {
             try Task.checkCancellation()
+            let remaining = totalTimeout - (clock.now - started)
+            guard remaining > .zero else {
+                if firstError == nil { firstError = AppError.routeServiceUnavailable }
+                break
+            }
             do {
-                let route = try await generator.generateRoute(
-                    city: city,
-                    days: variant.days,
-                    placesPerDay: variant.placesPerDay,
-                    preferences: variant.preferences,
-                    transport: transport,
-                    excludingPlaceNames: usedPlaceNames
-                )
+                let route = try await withDeadline(remaining) { [generator] in
+                    try await generator.generateRoute(
+                        city: city,
+                        days: variant.days,
+                        placesPerDay: variant.placesPerDay,
+                        preferences: variant.preferences,
+                        transport: transport,
+                        excludingPlaceNames: usedPlaceNames
+                    )
+                }
                 usedPlaceNames.formUnion(route.days.flatMap(\.places).map(\.name))
                 built.append((
                     variant.placesPerDay,
@@ -75,6 +90,10 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
                 ))
             } catch is CancellationError {
                 throw CancellationError()
+            } catch DeadlineError.exceeded {
+                // Out of time: keep the options already built and stop building.
+                if firstError == nil { firstError = AppError.routeServiceUnavailable }
+                break
             } catch {
                 // Один неудачный вариант не отменяет остальные.
                 if firstError == nil { firstError = error }

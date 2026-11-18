@@ -117,6 +117,37 @@ final class RouteOptionsPlannerTests: XCTestCase {
         XCTAssertEqual(titles.count, TripInterest.allCases.count)
     }
 
+    func testStalledOptionIsDroppedAfterTheTotalTimeout() async throws {
+        let generator = StallingRouteGenerator(stallFromCall: 2)
+        let planner = RouteOptionsPlanner(generator: generator, totalTimeout: .milliseconds(300))
+        let started = ContinuousClock.now
+
+        let options = try await planner.options(
+            for: TripRequest(city: "Utrecht", interests: [.castlesAndAbbeys], days: 1),
+            transport: .car
+        )
+
+        XCTAssertEqual(options.map(\.title), ["Standard"], "The option that finished in time is kept")
+        XCTAssertLessThan(ContinuousClock.now - started, .seconds(5))
+    }
+
+    func testThrowsServiceUnavailableWhenNothingFinishesInTime() async {
+        let generator = StallingRouteGenerator(stallFromCall: 1)
+        let planner = RouteOptionsPlanner(generator: generator, totalTimeout: .milliseconds(300))
+
+        do {
+            _ = try await planner.options(
+                for: TripRequest(city: "Utrecht", interests: [.castlesAndAbbeys], days: 1),
+                transport: .car
+            )
+            XCTFail("Expected service unavailable when no option finished in time")
+        } catch AppError.routeServiceUnavailable {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testVariantBudgetKeepsTheWholeBatchUnderTheMapKitMinuteLimit() {
         // MapKit allows about 50 directions requests a minute. The options are built back to back.
         XCTAssertLessThanOrEqual(RouteOptionsPlanner.requestBudgetPerVariant * 3, 50)
@@ -183,6 +214,32 @@ private final class RecordingRouteGenerator: RouteGenerating {
             throw error
         }
         let stop = Place(name: "Stop \(calls.count)", type: preferences.first ?? "", latitude: 51.5, longitude: 3.6)
+        return Route(city: city, days: [RouteDay(dayNumber: 1, places: [stop])], transport: transport)
+    }
+}
+
+/// Answers quickly until `stallFromCall`, then never answers, like a stuck MapKit request.
+@MainActor
+private final class StallingRouteGenerator: RouteGenerating {
+    private(set) var calls = 0
+    private let stallFromCall: Int
+
+    init(stallFromCall: Int) {
+        self.stallFromCall = stallFromCall
+    }
+
+    func generateRoute(
+        city: String,
+        days: Int,
+        placesPerDay: Int,
+        preferences: [String],
+        transport: TransportMode
+    ) async throws -> Route {
+        calls += 1
+        if calls >= stallFromCall {
+            try await Task.sleep(for: .seconds(60))
+        }
+        let stop = Place(name: "Stop \(calls)", type: "castles", latitude: 51.5, longitude: 3.6)
         return Route(city: city, days: [RouteDay(dayNumber: 1, places: [stop])], transport: transport)
     }
 }
