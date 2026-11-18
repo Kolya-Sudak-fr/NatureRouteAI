@@ -106,6 +106,30 @@ extension MKDirections {
     }
 }
 
+/// Spaces out MapKit directions requests. A burst of requests trips MapKit's throttle
+/// even when the total stays under its per-minute limit, so requests are sent at a
+/// steady pace instead.
+@MainActor
+final class RequestPacer {
+    private let interval: Duration
+    private let clock = ContinuousClock()
+    private var lastStart: ContinuousClock.Instant?
+
+    init(interval: Duration) {
+        self.interval = interval
+    }
+
+    func waitForTurn() async throws {
+        if let lastStart {
+            let elapsed = clock.now - lastStart
+            if elapsed < interval {
+                try await Task.sleep(for: interval - elapsed)
+            }
+        }
+        lastStart = clock.now
+    }
+}
+
 @MainActor
 final class MapKitRouteMetricsService: RouteMetricsProviding {
     private struct Key: Hashable {
@@ -120,6 +144,8 @@ final class MapKitRouteMetricsService: RouteMetricsProviding {
     /// MapKit can stop calling back without an error. A request that runs this long
     /// counts as a service failure, so one stuck request cannot stall the whole route.
     private let requestTimeout: Duration
+    /// 1.5 s between requests keeps the rate near 40 a minute, under MapKit's limit of about 50.
+    private let pacer = RequestPacer(interval: .milliseconds(1500))
     private var requestCount = 0
     private var cache: [Key: RouteMetrics] = [:]
     private var planningSessionID = UUID()
@@ -155,6 +181,7 @@ final class MapKitRouteMetricsService: RouteMetricsProviding {
         request.source = MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)))
         request.destination = MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: candidate.latitude, longitude: candidate.longitude)))
         request.transportType = type
+        try await pacer.waitForTurn()
         let directions = MKDirections(request: request)
         let response: MKDirections.Response
         do {
