@@ -45,3 +45,26 @@ final class DeadlineTests: XCTestCase {
         }
     }
 }
+
+@MainActor
+final class RequestPacerTests: XCTestCase {
+
+    func testRequestsAreSpacedOutByTheInterval() async throws {
+        let pacer = RequestPacer(interval: .milliseconds(200))
+        try await pacer.waitForTurn()
+        let started = ContinuousClock.now
+
+        try await pacer.waitForTurn()
+
+        XCTAssertGreaterThanOrEqual(ContinuousClock.now - started, .milliseconds(150))
+    }
+
+    func testFirstRequestDoesNotWait() async throws {
+        let pacer = RequestPacer(interval: .seconds(60))
+        let started = ContinuousClock.now
+
+        try await pacer.waitForTurn()
+
+        XCTAssertLessThan(ContinuousClock.now - started, .seconds(5))
+    }
+}

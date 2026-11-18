@@ -26,10 +26,10 @@ protocol RouteOptionsPlanning {
 @MainActor
 final class RouteOptionsPlanner: RouteOptionsPlanning {
 
-    /// MapKit allows about 50 directions requests a minute, and the three options are
-    /// built back to back. 3 × 14 = 42 stays under that, so the third option is not
-    /// throttled by the first two.
-    static let requestBudgetPerVariant = 14
+    /// The three options are built back to back, and MapKit throttles directions
+    /// requests that come in bursts. In a live run, 3 × 14 = 42 requests still left the
+    /// third option throttled, so each option gets 8 (24 in total).
+    static let requestBudgetPerVariant = 8
 
     /// The planner the home assistant uses: a generator with the per-variant budget.
     static func standard() -> RouteOptionsPlanner {
@@ -38,7 +38,8 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
 
     /// The whole batch must finish within this time. Options that are ready by then are
     /// kept; the rest are dropped rather than leaving the user on a spinner.
-    static let totalTimeout: Duration = .seconds(90)
+    /// With MapKit requests paced, three options take about 90 seconds in a live run.
+    static let totalTimeout: Duration = .seconds(150)
 
     private let generator: RouteGenerating
     private let totalTimeout: Duration
