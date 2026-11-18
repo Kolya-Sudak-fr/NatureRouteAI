@@ -84,6 +84,13 @@ final class RouteOptionsPlanner: RouteOptionsPlanning {
                         excludingPlaceNames: usedPlaceNames
                     )
                 }
+                // A route with fewer stops than asked for would mislabel the option
+                // (a "Longer" route with one stop), so it is not offered.
+                let stops = route.days.flatMap(\.places).count
+                guard stops >= variant.days * variant.placesPerDay else {
+                    if firstError == nil { firstError = AppError.noPlacesFound }
+                    continue
+                }
                 usedPlaceNames.formUnion(route.days.flatMap(\.places).map(\.name))
                 built.append((
                     variant.placesPerDay,

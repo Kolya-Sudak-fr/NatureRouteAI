@@ -56,6 +56,20 @@ final class RouteOptionsPlannerTests: XCTestCase {
         XCTAssertEqual(options.map(\.title), ["Standard", "Longer"])
     }
 
+    /// A route with fewer stops than asked for would be a "Longer" route with one stop.
+    func testOptionWithFewerStopsThanRequestedIsNotOffered() async throws {
+        let generator = RecordingRouteGenerator()
+        generator.shortRouteCalls = [3]
+        let planner = RouteOptionsPlanner(generator: generator)
+
+        let options = try await planner.options(
+            for: TripRequest(city: "Middelburg", interests: [.castlesAndAbbeys, .historicSites], days: nil),
+            transport: .car
+        )
+
+        XCTAssertEqual(options.map(\.title), ["Shorter", "Standard"])
+    }
+
     func testThrowsWhenEveryVariantFails() async {
         let generator = RecordingRouteGenerator()
         generator.errorsByCall = [1: AppError.noPlacesFound, 2: AppError.noPlacesFound, 3: AppError.noPlacesFound]
@@ -117,6 +131,22 @@ final class RouteOptionsPlannerTests: XCTestCase {
         XCTAssertEqual(titles.count, TripInterest.allCases.count)
     }
 
+    func testLaterOptionsSkipPlacesAlreadyOffered() async throws {
+        let generator = RecordingRouteGenerator()
+        let planner = RouteOptionsPlanner(generator: generator)
+
+        _ = try await planner.options(
+            for: TripRequest(city: "Utrecht", interests: [.castlesAndAbbeys, .historicSites], days: nil),
+            transport: .car
+        )
+
+        // Standard (2 days × 3 stops) is built first; Shorter (2 × 2) skips its six stops,
+        // and Longer (2 × 4) skips the ten stops of the first two.
+        XCTAssertEqual(generator.calls[0].excludedNames, [])
+        XCTAssertEqual(generator.calls[1].excludedNames, Set((1...6).map { "Stop \($0)" }))
+        XCTAssertEqual(generator.calls[2].excludedNames, Set((1...10).map { "Stop \($0)" }))
+    }
+
     func testStalledOptionIsDroppedAfterTheTotalTimeout() async throws {
         let generator = StallingRouteGenerator(stallFromCall: 2)
         let planner = RouteOptionsPlanner(generator: generator, totalTimeout: .milliseconds(300))
@@ -160,7 +190,8 @@ final class RouteOptionsPlannerTests: XCTestCase {
     }
 }
 
-/// Записывает, с какими параметрами его вызвали, и отдаёт маршрут с одной остановкой.
+/// Записывает параметры каждого вызова и отдаёт маршрут с полным числом остановок.
+/// Имена остановок уникальны на протяжении всех вызовов.
 @MainActor
 private final class RecordingRouteGenerator: RouteGenerating {
 
@@ -176,6 +207,9 @@ private final class RecordingRouteGenerator: RouteGenerating {
     private(set) var calls: [Call] = []
     /// Номер вызова (с 1) → ошибка, которую нужно бросить на этом вызове.
     var errorsByCall: [Int: Error] = [:]
+    /// Номера вызовов, на которых маршрут возвращается с одной остановкой.
+    var shortRouteCalls: Set<Int> = []
+    private var stopCounter = 0
 
     func generateRoute(
         city: String,
@@ -210,11 +244,23 @@ private final class RecordingRouteGenerator: RouteGenerating {
             transport: transport,
             excludedNames: excludingPlaceNames
         ))
-        if let error = errorsByCall[calls.count] {
+        let callNumber = calls.count
+        if let error = errorsByCall[callNumber] {
             throw error
         }
-        let stop = Place(name: "Stop \(calls.count)", type: preferences.first ?? "", latitude: 51.5, longitude: 3.6)
-        return Route(city: city, days: [RouteDay(dayNumber: 1, places: [stop])], transport: transport)
+        let stopsWanted = shortRouteCalls.contains(callNumber) ? 1 : days * placesPerDay
+        var dayRoutes: [RouteDay] = []
+        var remaining = stopsWanted
+        for dayNumber in 1...max(days, 1) where remaining > 0 {
+            var places: [Place] = []
+            for _ in 0..<min(placesPerDay, remaining) {
+                stopCounter += 1
+                places.append(Place(name: "Stop \(stopCounter)", type: preferences.first ?? "", latitude: 51.5, longitude: 3.6))
+            }
+            remaining -= places.count
+            dayRoutes.append(RouteDay(dayNumber: dayNumber, places: places))
+        }
+        return Route(city: city, days: dayRoutes, transport: transport)
     }
 }
 
@@ -239,7 +285,9 @@ private final class StallingRouteGenerator: RouteGenerating {
         if calls >= stallFromCall {
             try await Task.sleep(for: .seconds(60))
         }
-        let stop = Place(name: "Stop \(calls)", type: "castles", latitude: 51.5, longitude: 3.6)
-        return Route(city: city, days: [RouteDay(dayNumber: 1, places: [stop])], transport: transport)
+        let places = (0..<(days * placesPerDay)).map { index in
+            Place(name: "Stop \(calls)-\(index)", type: "castles", latitude: 51.5, longitude: 3.6)
+        }
+        return Route(city: city, days: [RouteDay(dayNumber: 1, places: places)], transport: transport)
     }
 }
